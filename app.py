@@ -1,12 +1,9 @@
-import eventlet
-eventlet.monkey_patch()
-
 import os
 from flask import Flask, render_template_string
 from flask_socketio import SocketIO, emit
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 HTML_PAGE = """
 <!DOCTYPE html>
