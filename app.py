@@ -65,10 +65,11 @@ HTML_PAGE = """
         .tab-btn.active { color: #00a884; border-bottom-color: #00a884; }
         
         /* Content Panels */
-        .content { flex: 1; overflow-y: auto; display: none; padding: 12px; background-color: #0b141a; }
+        .content { flex: 1; overflow-y: auto; display: none; padding: 12px; background-color: #0b141a; -webkit-overflow-scrolling: touch; }
         .content.active { display: block; }
         
-        /* Contact List (1-on-1 Selection) */
+        /* Contact List Container with extra bottom padding for User #19 */
+        #contactListContainer { padding-bottom: 120px; }
         .contact-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: #202c33; border-radius: 10px; margin-bottom: 8px; cursor: pointer; border: 1px solid #222d34; }
         .contact-item:hover { background: #2a3942; }
         .contact-avatar { width: 45px; height: 45px; border-radius: 50%; object-fit: cover; }
@@ -99,11 +100,11 @@ HTML_PAGE = """
         .status-publisher { background: #202c33; padding: 14px; border-radius: 10px; margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px; border: 1px solid #222d34; }
         .status-publisher textarea { background: #2a3942; border: none; padding: 10px; border-radius: 8px; color: white; resize: none; font-size: 13px; outline: none; }
         
-        .qr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; padding-bottom: 70px; }
+        .qr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; padding-bottom: 120px; }
         .qr-card { background-color: #202c33; padding: 12px; border-radius: 10px; text-align: center; border: 1px solid #222d34; }
         .btn-kick { background-color: #ea868f; color: #842029; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 8px; width: 100%; }
         
-        .profile-form { display: flex; flex-direction: column; gap: 12px; max-width: 400px; margin: 0 auto; background: #202c33; padding: 20px; border-radius: 10px; text-align: center; }
+        .profile-form { display: flex; flex-direction: column; gap: 12px; max-width: 400px; margin: 0 auto; background: #202c33; padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 100px; }
         .profile-avatar-preview { width: 90px; height: 90px; border-radius: 50%; object-fit: cover; margin: 0 auto 10px auto; border: 3px solid #00a884; }
 
         /* Video Call Modal */
@@ -177,7 +178,7 @@ HTML_PAGE = """
             </div>
         </div>
         <h4 style="margin-bottom:10px; color:#8696a0; font-size:13px;">الحالات الحديثة</h4>
-        <div id="statusList">
+        <div id="statusList" style="padding-bottom:120px;">
             {% for st in statuses %}
             <div class="status-card">
                 <div class="status-header">
@@ -256,13 +257,12 @@ HTML_PAGE = """
         const mySlotId = {{ current_slot_id }};
         let activeTargetSlot = null;
         let activeRoom = null;
-        let secretKey = "bsher-e2ee-key-2026"; // مفتاح تشفير العميل
+        let secretKey = "bsher-e2ee-key-2026";
         let currentAvatarData = "{{ user_data.avatar }}";
 
         const socket = io();
         socket.emit('join', { token: currentToken });
 
-        // Client-side Encryption & Decryption Functions (E2EE)
         function encryptPayload(text) {
             return CryptoJS.AES.encrypt(text, secretKey).toString();
         }
@@ -284,7 +284,6 @@ HTML_PAGE = """
             document.getElementById('callActionsBar').style.display = 'flex';
             document.getElementById('hdrChatTarget').innerText = targetName;
             
-            // Generate deterministic private room ID for these 2 users only
             activeRoom = (mySlotId < targetSlotId) ? `room_${mySlotId}_${targetSlotId}` : `room_${targetSlotId}_${mySlotId}`;
             socket.emit('join_private_room', { room: activeRoom });
             document.getElementById('chatBox').innerHTML = `<div style="text-align:center; font-size:11px; color:#00a884; margin:10px 0;">🔒 المحادثة مشفرة بالكامل بينك وبين ${targetName} (E2EE)</div>`;
@@ -296,7 +295,6 @@ HTML_PAGE = """
             const chatBox = document.getElementById("chatBox");
             const div = document.createElement("div");
             
-            // Client-side Decryption
             const decryptedContent = decryptPayload(data.encrypted_data);
             
             let contentHtml = "";
@@ -356,7 +354,6 @@ HTML_PAGE = """
             }
         }
 
-        // Voice Recording Script with Client-side Encryption
         let mediaRecorder, audioChunks = [], isRecording = false;
         async function toggleRecord() {
             const micBtn = document.getElementById("micBtn");
@@ -388,7 +385,6 @@ HTML_PAGE = """
             }
         }
 
-        // P2P Direct WebRTC Video & Audio Calls
         let localStream, peerConnection;
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
@@ -539,7 +535,6 @@ def handle_private_message(data):
     slot_id, user_data = get_slot_by_token(data.get('token'))
     if user_data:
         now_time = datetime.now().strftime("%I:%M %p")
-        # السيرفر يمرر البيانات المشفرة encrypted_data فقط دون امتلاك مفتاح فك التشفير
         emit('receive_private_message', {
             'room': data.get('room'),
             'sender_slot': slot_id,
