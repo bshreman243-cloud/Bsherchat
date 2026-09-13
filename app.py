@@ -5,7 +5,7 @@ from flask import Flask, render_template_string, request, jsonify
 from flask_socketio import SocketIO, emit, join_room
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'bsher-e2ee-v10-master-key-2026'
+app.config['SECRET_KEY'] = 'bsher-e2ee-v11-master-key-2026'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", max_http_buffer_size=50000000)
 
 ADMIN_TOKEN = "bsher-admin-master-key-2026"
@@ -21,11 +21,12 @@ slots = {
     }
 }
 
+# تثبيت الأكواد للأبد لكي لا تتغير عند إعادة تشغيل السيرفر
 for i in range(1, 20):
     slots[i] = {
         "id": i,
         "type": "user",
-        "token": secrets.token_hex(6),
+        "token": f"bsher-user-code-0{i}" if i < 10 else f"bsher-user-code-{i}",
         "name": f"مستخدم #{i}",
         "bio": "أهلاً بي في bisher chat",
         "avatar": "https://cdn-icons-png.flaticon.com/512/149/149071.png"
@@ -232,16 +233,16 @@ HTML_PAGE = """
 
     {% if user_data.type == 'admin' %}
     <div id="adminTab" class="content">
-        <h4 style="margin-bottom:12px; color:#00a884;">أكواد الـ QR والتحكم بالمستخدمين (19 كود)</h4>
+        <h4 style="margin-bottom:12px; color:#00a884;">أكواد الـ QR والتحكم بالمستخدمين (19 كود ثابت)</h4>
         <div class="qr-grid">
             {% for sid, sinfo in all_slots.items() %}
             <div class="qr-card">
                 <h4>{{ sinfo.name }} {% if sid == 0 %}(أنت - المالك){% endif %}</h4>
-                <p style="font-size:11px; color:#8696a0;">الكود السرّي: <b style="color:#00a884;">{{ sinfo.token }}</b></p>
+                <p style="font-size:11px; color:#8696a0;">الكود الثابت: <b style="color:#00a884;">{{ sinfo.token }}</b></p>
                 <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data={{ base_url }}/?token={{ sinfo.token }}" width="130" height="130" style="border:3px solid white; border-radius:6px; margin:8px 0;">
                 <p style="font-size:10px; color:#00a884; word-break:break-all;">{{ base_url }}/?token={{ sinfo.token }}</p>
                 {% if sid != 0 %}
-                <button class="btn-kick" onclick="kickUser({{ sid }})">🚫 طرد وتجديد الـ QR</button>
+                <button class="btn-kick" onclick="kickUser({{ sid }})">🚫 إعادة تعيين الكود</button>
                 {% endif %}
             </div>
             {% endfor %}
@@ -297,7 +298,6 @@ HTML_PAGE = """
             }
         };
 
-        /* Custom Tone Manager */
         function saveCustomTone(type, input) {
             if (input.files && input.files[0]) {
                 const reader = new FileReader();
@@ -572,8 +572,6 @@ HTML_PAGE = """
 
         let localStream = null, peerConnection = null;
         let isMicMuted = false, isSpeakerMuted = false;
-        
-        /* Multi-STUN Servers Configuration for Robust Call Connections */
         const config = { 
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
@@ -621,14 +619,11 @@ HTML_PAGE = """
             }
         }
 
-        /* FIXED: Global WebRTC Incoming Call Listener with Auto-Room Binding */
         socket.on('signal', async function(data) {
             if (data.token === currentToken) return;
-            
             if (!activeRoom && data.type === 'offer') {
                 activeRoom = data.room;
             }
-
             if (data.room !== activeRoom) return;
             
             if (data.type === 'offer') {
@@ -771,7 +766,7 @@ HTML_PAGE = """
         }
 
         function kickUser(slotId) {
-            if (confirm('هل أنت تأكد من طرد هذا المستخدم وتوليد رمز جديد له؟')) {
+            if (confirm('هل أنت تأكد من إعادة تعيين كود هذا المستخدم؟')) {
                 fetch('/kick_user', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -960,7 +955,7 @@ def index():
         
     slot_id, user_data = get_slot_by_token(token)
     if not user_data:
-        return "<h2 style='color:white; background:#111b21; padding:20px; text-align:center;'>❌ الكود غير صالح أو تم طرده!</h2>", 403
+        return "<h2 style='color:white; background:#111b21; padding:20px; text-align:center;'>❌ الكود غير صالح أو تم طرده! يرجى إعادة تسجيل الدخول.</h2>", 403
         
     base_url = request.host_url.rstrip('/')
     return render_template_string(HTML_PAGE, user_data=user_data, current_slot_id=slot_id, all_slots=slots, statuses=statuses, base_url=base_url)
@@ -982,7 +977,8 @@ def kick_user():
     if data.get('admin_token') == ADMIN_TOKEN:
         slot_id = int(data.get('slot_id'))
         if slot_id in slots and slot_id != 0:
-            slots[slot_id]['token'] = secrets.token_hex(6)
+            # إعادة تعيين التوكن ليبقى ثابتاً بصيغة واضحة
+            slots[slot_id]['token'] = f"bsher-user-code-0{slot_id}" if slot_id < 10 else f"bsher-user-code-{slot_id}"
             slots[slot_id]['name'] = f"مستخدم #{slot_id}"
             slots[slot_id]['bio'] = "أهلاً بي في bisher chat"
             socketio.emit('kicked', room=f"slot_{slot_id}")
