@@ -5,7 +5,7 @@ from flask import Flask, render_template_string, request, jsonify
 from flask_socketio import SocketIO, emit, join_room
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'bsher-e2ee-v11-master-key-2026'
+app.config['SECRET_KEY'] = 'bsher-e2ee-v14-master-key-2026'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", max_http_buffer_size=50000000)
 
 ADMIN_TOKEN = "bsher-admin-master-key-2026"
@@ -21,7 +21,6 @@ slots = {
     }
 }
 
-# تثبيت الأكواد للأبد لكي لا تتغير عند إعادة تشغيل السيرفر
 for i in range(1, 20):
     slots[i] = {
         "id": i,
@@ -75,7 +74,7 @@ HTML_PAGE = """
         #activeChatArea { display: none; flex-direction: column; height: calc(100vh - 170px); }
         .chat-box { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-bottom: 10px; }
         
-        .msg { max-width: 80%; padding: 8px 12px; border-radius: 8px; font-size: 14px; line-height: 1.4; word-break: break-word; }
+        .msg { max-width: 80%; padding: 8px 12px; border-radius: 8px; font-size: 14px; line-height: 1.4; word-break: break-word; position: relative; }
         .my-msg { background-color: #005c4b; align-self: flex-start; border-top-right-radius: 0; color: #e9edef; }
         .other-msg { background-color: #202c33; align-self: flex-end; border-top-left-radius: 0; color: #e9edef; }
         .e2e-badge { font-size: 9px; color: #00a884; display: flex; align-items: center; gap: 3px; margin-bottom: 4px; }
@@ -83,6 +82,18 @@ HTML_PAGE = """
         .chat-media { max-width: 100%; max-height: 220px; border-radius: 8px; margin-top: 4px; }
         audio { width: 220px; height: 35px; margin-top: 4px; }
         
+        /* Reaction styling */
+        .msg-reactions { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+        .reaction-badge { background: #111b21; padding: 2px 6px; border-radius: 12px; font-size: 12px; border: 1px solid #222d34; display: inline-flex; align-items: center; gap: 2px; }
+        .reaction-trigger { font-size: 12px; cursor: pointer; opacity: 0.7; margin-right: 6px; }
+        .reaction-popup { display: none; position: absolute; background: #202c33; border: 1px solid #3b4a54; border-radius: 20px; padding: 4px 8px; gap: 6px; z-index: 100; bottom: 100%; right: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+        .reaction-popup span { cursor: pointer; font-size: 16px; padding: 2px; }
+
+        /* Emoji Picker Box */
+        #emojiPicker { display: none; position: absolute; bottom: 65px; left: 10px; background: #202c33; border: 1px solid #3b4a54; border-radius: 10px; padding: 10px; width: 280px; grid-template-columns: repeat(6, 1fr); gap: 8px; text-align: center; z-index: 999; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+        #emojiPicker span { font-size: 20px; cursor: pointer; padding: 4px; border-radius: 4px; }
+        #emojiPicker span:hover { background: #2a3942; }
+
         .input-bar { background-color: #202c33; padding: 8px 10px; display: none; gap: 6px; align-items: center; position: fixed; bottom: 0; left: 0; right: 0; height: 60px; border-top: 1px solid #222d34; }
         .input-bar input[type="text"] { flex: 1; background-color: #2a3942; border: none; padding: 10px 14px; border-radius: 20px; color: white; outline: none; font-size: 14px; }
         .icon-btn { background: none; border: none; font-size: 19px; cursor: pointer; padding: 5px; color: #8696a0; }
@@ -109,6 +120,7 @@ HTML_PAGE = """
         .call-controls { display: flex; gap: 20px; margin-bottom: 20px; align-items: center; }
         .btn-ctrl { background: #2a3942; color: #00a884; border: none; width: 50px; height: 50px; border-radius: 50%; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
         .btn-end-call { background: #ea868f; color: white; border: none; width: 60px; height: 60px; border-radius: 50%; font-size: 24px; cursor: pointer; }
+        .btn-accept-call { background: #00a884; color: white; border: none; width: 60px; height: 60px; border-radius: 50%; font-size: 24px; cursor: pointer; display: none; }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
@@ -192,6 +204,13 @@ HTML_PAGE = """
                     </div>
                 </div>
                 {% if st.text %}<p style="font-size:14px; color:#00a884;">{{ st.text }}</p>{% endif %}
+                {% if st.media %}
+                    {% if 'video' in st.media or st.media.startswith('data:video') %}
+                        <video src="{{ st.media }}" controls class="chat-media"></video>
+                    {% else %}
+                        <img src="{{ st.media }}" class="chat-media">
+                    {% endif %}
+                {% endif %}
             </div>
             {% endfor %}
         </div>
@@ -250,7 +269,24 @@ HTML_PAGE = """
     </div>
     {% endif %}
 
+    <!-- Emoji Picker Box -->
+    <div id="emojiPicker">
+        <span onclick="insertEmoji('😊')">😊</span>
+        <span onclick="insertEmoji('😂')">😂</span>
+        <span onclick="insertEmoji('❤️')">❤️</span>
+        <span onclick="insertEmoji('👍')">👍</span>
+        <span onclick="insertEmoji('🔥')">🔥</span>
+        <span onclick="insertEmoji('😎')">😎</span>
+        <span onclick="insertEmoji('😢')">😢</span>
+        <span onclick="insertEmoji('😡')">😡</span>
+        <span onclick="insertEmoji('😮')">😮</span>
+        <span onclick="insertEmoji('👏')">👏</span>
+        <span onclick="insertEmoji('🙏')">🙏</span>
+        <span onclick="insertEmoji('🎉')">🎉</span>
+    </div>
+
     <div class="input-bar" id="inputBar">
+        <button class="icon-btn" onclick="toggleEmojiPicker()" title="الإيموجي">😊</button>
         <button class="icon-btn" onclick="document.getElementById('imgFile').click()">📷</button>
         <input type="file" id="imgFile" accept="image/*,video/*" style="display:none;" onchange="sendMediaMessage(this)">
         <input type="text" id="msgText" placeholder="اكتب رسالتك المشفرة...">
@@ -266,10 +302,19 @@ HTML_PAGE = """
             <video id="localVideo" autoplay playsinline muted></video>
         </div>
         <div class="call-controls">
-            <button class="btn-ctrl" id="btnToggleMic" onclick="toggleMic()">🎙️</button>
+            <button class="btn-ctrl" id="btnToggleMic" onclick="toggleMic()" style="display:none;">🎙️</button>
+            <button class="btn-accept-call" id="btnAcceptCall" onclick="acceptIncomingCall()">📞</button>
             <button class="btn-end-call" onclick="endCall()">📞</button>
-            <button class="btn-ctrl" id="btnToggleSpeaker" onclick="toggleSpeaker()">🔊</button>
+            <button class="btn-ctrl" id="btnToggleSpeaker" onclick="toggleSpeaker()" style="display:none;">🔊</button>
         </div>
+    </div>
+
+    <div id="scannerModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; z-index: 10000; flex-direction: column; align-items: center; justify-content: space-between; padding: 20px;">
+        <h4 style="color:#00a884; margin-top:15px;">وجه الكاميرا نحو رمز الـ QR 📸</h4>
+        <div style="width: 100%; max-width: 320px; height: 320px; position: relative; border-radius: 16px; overflow: hidden; border: 3px solid #00a884; margin-top: 40px;">
+            <video id="videoFeed" playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
+        </div>
+        <button onclick="stopLiveScanner()" style="background: #ea868f; color: #842029; border: none; padding: 12px 24px; border-radius: 20px; font-weight: bold; cursor: pointer; margin-bottom: 30px;">إلغاء الكاميرا ✖</button>
     </div>
 
     <script>
@@ -291,12 +336,27 @@ HTML_PAGE = """
         let activeTargetAvatar = "";
         let secretKey = "bsher-e2ee-key-2026";
         let currentAvatarData = myDefaultAvatar;
+        let currentStatusMedia = "";
+        let pendingOfferData = null;
+        let msgCounter = 0;
 
         window.onpopstate = function(event) {
             if (document.getElementById('activeChatArea').style.display === 'flex') {
                 closePrivateChat(false);
             }
         };
+
+        function toggleEmojiPicker() {
+            const picker = document.getElementById('emojiPicker');
+            picker.style.display = (picker.style.display === 'grid') ? 'none' : 'grid';
+        }
+
+        function insertEmoji(emoji) {
+            const input = document.getElementById('msgText');
+            input.value += emoji;
+            document.getElementById('emojiPicker').style.display = 'none';
+            input.focus();
+        }
 
         function saveCustomTone(type, input) {
             if (input.files && input.files[0]) {
@@ -394,24 +454,6 @@ HTML_PAGE = """
             setTimeout(stopRingtone, 4000);
         }
 
-        function requestNotificationPermission() {
-            if ("Notification" in window) {
-                Notification.requestPermission().then(perm => {
-                    if (perm === "granted") {
-                        alert("✅ تم تفعيل إشعارات الهاتف بنجاح!");
-                        new Notification("bisher chat", { body: "الإشعارات النبضية مفعلة وجاهزة!", icon: myDefaultAvatar });
-                    }
-                });
-            }
-        }
-
-        function triggerSystemNotification(title, bodyText) {
-            playMsgSound();
-            if ("Notification" in window && Notification.permission === "granted") {
-                new Notification(title, { body: bodyText, icon: myDefaultAvatar });
-            }
-        }
-
         const socket = io();
         socket.emit('join', { token: currentToken });
 
@@ -458,6 +500,7 @@ HTML_PAGE = """
             document.getElementById('inputBar').style.display = 'none';
             document.getElementById('callActionsBar').style.display = 'none';
             document.getElementById('btnBackToContacts').style.display = 'none';
+            document.getElementById('emojiPicker').style.display = 'none';
 
             document.getElementById('hdrChatTarget').innerText = myDefaultName;
             document.getElementById('hdrAvatar').src = myDefaultAvatar;
@@ -469,13 +512,17 @@ HTML_PAGE = """
 
         socket.on('receive_private_message', function(data) {
             if (data.sender_slot !== mySlotId) {
-                triggerSystemNotification(`رسالة مشفرة من ${data.sender_name}`, "🔒 وصلتك رسالة جديدة في bisher chat");
+                playMsgSound();
             }
 
             if (data.room !== activeRoom) return;
-            
+            appendMessage(data);
+        });
+
+        function appendMessage(data) {
             const chatBox = document.getElementById("chatBox");
             const div = document.createElement("div");
+            div.id = "msg_" + data.msg_id;
             const decryptedContent = decryptPayload(data.encrypted_data);
             
             let contentHtml = "";
@@ -490,35 +537,85 @@ HTML_PAGE = """
             }
 
             const badgeHtml = `<div class="e2e-badge">🔒 مشفّرة E2EE</div>`;
+            const reactionsHtml = `<div class="msg-reactions" id="reactions_${data.msg_id}"></div>`;
+            const triggerHtml = `<span class="reaction-trigger" onclick="toggleReactionPopup(${data.msg_id})">👍 تفاعل</span>`;
+            const popupHtml = `
+                <div class="reaction-popup" id="popup_${data.msg_id}">
+                    <span onclick="sendReaction(${data.msg_id}, '❤️')">❤️</span>
+                    <span onclick="sendReaction(${data.msg_id}, '👍')">👍</span>
+                    <span onclick="sendReaction(${data.msg_id}, '😂')">😂</span>
+                    <span onclick="sendReaction(${data.msg_id}, '😮')">😮</span>
+                    <span onclick="sendReaction(${data.msg_id}, '😢')">😢</span>
+                    <span onclick="sendReaction(${data.msg_id}, '😡')">😡</span>
+                </div>`;
 
             if (data.sender_slot === mySlotId) {
                 div.className = "msg my-msg";
-                div.innerHTML = badgeHtml + contentHtml + `<div class="msg-time">${data.time}</div>`;
+                div.innerHTML = badgeHtml + contentHtml + reactionsHtml + `<div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;"><span class="msg-time">${data.time}</span>${triggerHtml}</div>` + popupHtml;
             } else {
                 div.className = "msg other-msg";
-                div.innerHTML = badgeHtml + `<div style="font-size:11px; color:#53bdeb; font-weight:bold;">${data.sender_name}</div>` + contentHtml + `<div class="msg-time">${data.time}</div>`;
+                div.innerHTML = badgeHtml + `<div style="font-size:11px; color:#53bdeb; font-weight:bold;">${data.sender_name}</div>` + contentHtml + reactionsHtml + `<div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;"><span class="msg-time">${data.time}</span>${triggerHtml}</div>` + popupHtml;
             }
             
             chatBox.appendChild(div);
             chatBox.scrollTop = chatBox.scrollHeight;
+
+            if (data.reactions) {
+                updateReactionsUI(data.msg_id, data.reactions);
+            }
+        }
+
+        function toggleReactionPopup(msgId) {
+            const popup = document.getElementById(`popup_${msgId}`);
+            popup.style.display = (popup.style.display === 'flex') ? 'none' : 'flex';
+        }
+
+        function sendReaction(msgId, emoji) {
+            document.getElementById(`popup_${msgId}`).style.display = 'none';
+            socket.emit('send_reaction', {
+                room: activeRoom,
+                msg_id: msgId,
+                emoji: emoji,
+                token: currentToken
+            });
+        }
+
+        socket.on('update_reactions', function(data) {
+            updateReactionsUI(data.msg_id, data.reactions);
         });
+
+        function updateReactionsUI(msgId, reactions) {
+            const container = document.getElementById(`reactions_${msgId}`);
+            if (!container) return;
+            container.innerHTML = '';
+            for (let emoji in reactions) {
+                const badge = document.createElement('span');
+                badge.className = 'reaction-badge';
+                badge.innerHTML = `${emoji} ${reactions[emoji].length}`;
+                container.appendChild(badge);
+            }
+        }
 
         function sendMsg() {
             const input = document.getElementById("msgText");
             if (input.value.trim() !== "" && activeRoom) {
+                msgCounter++;
                 const encrypted = encryptPayload(input.value);
                 socket.emit('send_private_message', {
                     token: currentToken,
                     room: activeRoom,
+                    msg_id: msgCounter,
                     msg_type: 'text',
                     encrypted_data: encrypted
                 });
                 input.value = "";
+                document.getElementById('emojiPicker').style.display = 'none';
             }
         }
 
         function sendMediaMessage(input) {
             if (input.files && input.files[0] && activeRoom) {
+                msgCounter++;
                 const file = input.files[0];
                 const reader = new FileReader();
                 const isVideo = file.type.startsWith('video');
@@ -527,6 +624,7 @@ HTML_PAGE = """
                     socket.emit('send_private_message', {
                         token: currentToken,
                         room: activeRoom,
+                        msg_id: msgCounter,
                         msg_type: isVideo ? 'video' : 'image',
                         encrypted_data: encrypted
                     });
@@ -541,32 +639,57 @@ HTML_PAGE = """
             if (!isRecording) {
                 try {
                     recordStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    mediaRecorder = new MediaRecorder(recordStream);
+                    let options = { mimeType: 'audio/webm' };
+                    if (!MediaRecorder.isTypeSupported('audio/webm')) {
+                        if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                            options = { mimeType: 'audio/mp4' };
+                        } else {
+                            options = {};
+                        }
+                    }
+                    mediaRecorder = new MediaRecorder(recordStream, options);
                     audioChunks = [];
                     mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                    
                     mediaRecorder.onstop = () => {
                         if (recordStream) {
-                            recordStream.getTracks().forEach(track => track.stop());
+                            recordStream.getTracks().forEach(track => {
+                                track.stop();
+                                track.enabled = false;
+                            });
                             recordStream = null;
                         }
-                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        msgCounter++;
+                        const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
                         const reader = new FileReader();
                         reader.onload = function(e) {
                             const encrypted = encryptPayload(e.target.result);
-                            socket.emit('send_private_message', { token: currentToken, room: activeRoom, msg_type: 'audio', encrypted_data: encrypted });
+                            socket.emit('send_private_message', { token: currentToken, room: activeRoom, msg_id: msgCounter, msg_type: 'audio', encrypted_data: encrypted });
                         };
                         reader.readAsDataURL(audioBlob);
                     };
+
                     mediaRecorder.start();
                     isRecording = true;
                     micBtn.style.color = "#ea868f";
+                    document.getElementById('msgText').placeholder = "🎙️ جاري التسجيل... اضغط لإيقافه وإرساله";
                 } catch(err) {
-                    alert("يرجى إعطاء الصلاحية لاستخدام الميكروفون!");
+                    alert("يرجى السماح بصلاحية الميكروفون!");
                 }
             } else {
-                if (mediaRecorder) mediaRecorder.stop();
+                if (mediaRecorder) {
+                    mediaRecorder.stop();
+                }
+                if (recordStream) {
+                    recordStream.getTracks().forEach(track => {
+                        track.stop();
+                        track.enabled = false;
+                    });
+                    recordStream = null;
+                }
                 isRecording = false;
                 micBtn.style.color = "#8696a0";
+                document.getElementById('msgText').placeholder = "اكتب رسالتك المشفرة...";
             }
         }
 
@@ -575,8 +698,7 @@ HTML_PAGE = """
         const config = { 
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' }
+                { urls: 'stun:stun1.l.google.com:19302' }
             ] 
         };
 
@@ -585,6 +707,9 @@ HTML_PAGE = """
             document.getElementById('callModal').style.display = 'flex';
             document.getElementById('callAvatar').src = activeTargetAvatar || myDefaultAvatar;
             document.getElementById('callStatusText').innerText = isVideo ? "جاري الاتصال المرئي..." : "جاري الاتصال الصوتي...";
+            document.getElementById('btnAcceptCall').style.display = 'none';
+            document.getElementById('btnToggleMic').style.display = 'flex';
+            document.getElementById('btnToggleSpeaker').style.display = 'flex';
             
             if (isVideo) {
                 document.getElementById('videoContainer').style.display = 'flex';
@@ -614,8 +739,8 @@ HTML_PAGE = """
                 await peerConnection.setLocalDescription(offer);
                 socket.emit('signal', { room: activeRoom, token: currentToken, type: 'offer', offer: offer, isVideo: isVideo });
             } catch(e) {
-                alert("يرجى السماح بصلاحيات الميكروفون والكاميرا!");
-                endCall();
+                alert("يرجى السماح بصلاحيات الميكروفون والكاميرا للمكالمات!");
+                endCall(false);
             }
         }
 
@@ -628,49 +753,18 @@ HTML_PAGE = """
             
             if (data.type === 'offer') {
                 startRingtone();
+                pendingOfferData = data;
                 const callTypeLabel = data.isVideo ? "مكالمة فيديو مرئية 📹" : "مكالمة صوتية 📞";
                 
-                if ("Notification" in window && Notification.permission === "granted") {
-                    new Notification("مكالمة واردة في bisher chat", { body: `${callTypeLabel}`, icon: myDefaultAvatar });
-                }
+                document.getElementById('callModal').style.display = 'flex';
+                document.getElementById('callAvatar').src = myDefaultAvatar;
+                document.getElementById('callStatusText').innerText = `مكالمة واردة: ${callTypeLabel}`;
+                document.getElementById('videoContainer').style.display = 'none';
+                document.getElementById('callAvatar').style.display = 'block';
+                document.getElementById('btnAcceptCall').style.display = 'flex';
+                document.getElementById('btnToggleMic').style.display = 'none';
+                document.getElementById('btnToggleSpeaker').style.display = 'none';
 
-                if (confirm(`مكالمة واردة: ${callTypeLabel}! هل تريد الرد؟`)) {
-                    stopRingtone();
-                    document.getElementById('callModal').style.display = 'flex';
-                    document.getElementById('callAvatar').src = activeTargetAvatar || myDefaultAvatar;
-                    document.getElementById('callStatusText').innerText = "المكالمة متصلة 🟢";
-                    
-                    if (data.isVideo) {
-                        document.getElementById('videoContainer').style.display = 'flex';
-                        document.getElementById('callAvatar').style.display = 'none';
-                    } else {
-                        document.getElementById('videoContainer').style.display = 'none';
-                        document.getElementById('callAvatar').style.display = 'block';
-                    }
-
-                    localStream = await navigator.mediaDevices.getUserMedia({ video: data.isVideo, audio: true });
-                    if (data.isVideo) document.getElementById('localVideo').srcObject = localStream;
-                    
-                    peerConnection = new RTCPeerConnection(config);
-                    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-                    
-                    peerConnection.ontrack = e => {
-                        const remoteVid = document.getElementById('remoteVideo');
-                        remoteVid.srcObject = e.streams[0];
-                    };
-                    
-                    peerConnection.onicecandidate = e => {
-                        if (e.candidate) socket.emit('signal', { room: activeRoom, token: currentToken, type: 'candidate', candidate: e.candidate });
-                    };
-
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-                    const answer = await peerConnection.createAnswer();
-                    await peerConnection.setLocalDescription(answer);
-                    socket.emit('signal', { room: activeRoom, token: currentToken, type: 'answer', answer: answer });
-                } else {
-                    stopRingtone();
-                    endCall(true);
-                }
             } else if (data.type === 'answer' && peerConnection) {
                 stopRingtone();
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
@@ -682,6 +776,49 @@ HTML_PAGE = """
                 endCall(false);
             }
         });
+
+        async function acceptIncomingCall() {
+            stopRingtone();
+            if (!pendingOfferData) return;
+            
+            document.getElementById('btnAcceptCall').style.display = 'none';
+            document.getElementById('btnToggleMic').style.display = 'flex';
+            document.getElementById('btnToggleSpeaker').style.display = 'flex';
+            document.getElementById('callStatusText').innerText = "المكالمة متصلة 🟢";
+
+            if (pendingOfferData.isVideo) {
+                document.getElementById('videoContainer').style.display = 'flex';
+                document.getElementById('callAvatar').style.display = 'none';
+            } else {
+                document.getElementById('videoContainer').style.display = 'none';
+                document.getElementById('callAvatar').style.display = 'block';
+            }
+
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: pendingOfferData.isVideo, audio: true });
+                if (pendingOfferData.isVideo) document.getElementById('localVideo').srcObject = localStream;
+                
+                peerConnection = new RTCPeerConnection(config);
+                localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+                
+                peerConnection.ontrack = e => {
+                    const remoteVid = document.getElementById('remoteVideo');
+                    remoteVid.srcObject = e.streams[0];
+                };
+                
+                peerConnection.onicecandidate = e => {
+                    if (e.candidate) socket.emit('signal', { room: activeRoom, token: currentToken, type: 'candidate', candidate: e.candidate });
+                };
+
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(pendingOfferData.offer));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                socket.emit('signal', { room: activeRoom, token: currentToken, type: 'answer', answer: answer });
+            } catch(e) {
+                alert("يرجى السماح بالصلاحيات للرد على المكالمة!");
+                endCall(true);
+            }
+        }
 
         function toggleMic() {
             if (localStream) {
@@ -705,6 +842,7 @@ HTML_PAGE = """
 
         function endCall(emitEvent = true) {
             stopRingtone();
+            pendingOfferData = null;
             if (emitEvent && activeRoom) socket.emit('signal', { room: activeRoom, token: currentToken, type: 'end' });
             
             if (localStream) {
@@ -732,6 +870,7 @@ HTML_PAGE = """
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
             event.target.classList.add('active');
+            document.getElementById('emojiPicker').style.display = 'none';
             
             if (tabId !== 'contactsTab') {
                 document.getElementById('inputBar').style.display = 'none';
@@ -765,6 +904,36 @@ HTML_PAGE = """
             }
         }
 
+        function previewStatusMedia(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    currentStatusMedia = e.target.result;
+                    alert("✅ تم إرفاق ملف الحالة بنجاح، اضغط الآن على 'نشر الحالة'!");
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function postStatus() {
+            const text = document.getElementById('statusText').value.trim();
+            if (!text && !currentStatusMedia) {
+                alert("يرجى كتابة نص أو إضافة صورة/فيديو للحالة!");
+                return;
+            }
+            fetch('/post_status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: currentToken, text: text, media: currentStatusMedia })
+            }).then(res => res.json()).then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert("فشل نشر الحالة!");
+                }
+            });
+        }
+
         function kickUser(slotId) {
             if (confirm('هل أنت تأكد من إعادة تعيين كود هذا المستخدم؟')) {
                 fetch('/kick_user', {
@@ -774,10 +943,76 @@ HTML_PAGE = """
                 }).then(() => location.reload());
             }
         }
+
+        let videoStream = null;
+        let scanAnimFrame = null;
+
+        async function startLiveScanner() {
+            document.getElementById('scannerModal').style.display = 'flex';
+            const video = document.getElementById('videoFeed');
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                video.srcObject = videoStream;
+                video.setAttribute("playsinline", true);
+                video.play();
+                requestAnimationFrame(tickScanner);
+            } catch(err) {
+                alert("يرجى إعطاء صلاحية استخدام الكاميرا لمسح الـ QR!");
+                stopLiveScanner();
+            }
+        }
+
+        function tickScanner() {
+            const video = document.getElementById('videoFeed');
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+                if (code && code.data) {
+                    stopLiveScanner();
+                    try {
+                        const url = new URL(code.data);
+                        const token = url.searchParams.get('token');
+                        if (token) loginWithToken(token);
+                        else loginWithToken(code.data);
+                    } catch(err) {
+                        loginWithToken(code.data);
+                    }
+                    return;
+                }
+            }
+            scanAnimFrame = requestAnimationFrame(tickScanner);
+        }
+
+        function stopLiveScanner() {
+            if (scanAnimFrame) cancelAnimationFrame(scanAnimFrame);
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => {
+                    track.stop();
+                    track.enabled = false;
+                });
+                videoStream = null;
+            }
+            document.getElementById('scannerModal').style.display = 'none';
+        }
+
+        function loginWithToken(tokenVal) {
+            if (tokenVal) {
+                localStorage.setItem('bisher_chat_token', tokenVal);
+                window.location.href = '/?token=' + tokenVal;
+            }
+        }
     </script>
 </body>
 </html>
 """
+
+message_reactions = {}
 
 @app.route('/')
 def index():
@@ -803,9 +1038,7 @@ def index():
                 #scannerModal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; z-index: 10000; flex-direction: column; align-items: center; justify-content: space-between; padding: 20px; }
                 .scan-view { width: 100%; max-width: 320px; height: 320px; position: relative; border-radius: 16px; overflow: hidden; border: 3px solid #00a884; margin-top: 40px; }
                 #videoFeed { width: 100%; height: 100%; object-fit: cover; }
-                .scan-laser { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #00a884; box-shadow: 0 0 12px #00a884; animation: scanAnim 2s infinite ease-in-out; }
-                @keyframes scanAnim { 0% { top: 0%; } 50% { top: 98%; } 100% { top: 0%; } }
-                .btn-close-scan { background: #ea868f; color: #842029; border: none; padding: 12px 24px; border-radius: 20px; font-weight: bold; font-size: 14px; cursor: pointer; margin-bottom: 30px; }
+                .btn-close-scan { background: #ea868f; color: #842029; border: none; padding: 12px 24px; border-radius: 20px; font-weight: bold; cursor: pointer; margin-bottom: 30px; }
             </style>
         </head>
         <body>
@@ -818,7 +1051,7 @@ def index():
                 <h3 style="color:#00a884; margin-bottom: 6px;">bisher chat 🔒</h3>
                 <p style="font-size:12px; color:#8696a0; margin-bottom: 12px;">اختر طريقة تفعيل حسابه سريعة:</p>
                 
-                <button class="btn-scanner" onclick="startLiveScanner()">📷 مسح الـ QR مباشر بالكاميرا</button>
+                <button class="btn-scanner" onclick="parentStartLiveScanner()">📷 مسح الـ QR مباشر بالكاميرا</button>
                 <button class="btn-qr" onclick="document.getElementById('qrFileInput').click()">🖼️ اختر صورة الـ QR من ألبوم الصور</button>
                 <input type="file" id="qrFileInput" accept="image/*" style="display:none;" onchange="scanQRFromImage(this)">
                 
@@ -832,33 +1065,15 @@ def index():
                 <h4 style="color:#00a884; margin-top:15px;">وجه الكاميرا نحو رمز الـ QR 📸</h4>
                 <div class="scan-view">
                     <video id="videoFeed" playsinline></video>
-                    <div class="scan-laser"></div>
                 </div>
-                <p style="color:#8696a0; font-size:12px; text-align:center;">سيتم التقاط الكود تلقائياً وبسرعة فورية</p>
-                <button class="btn-close-scan" onclick="stopLiveScanner()">إلغاء الكاميرا ✖</button>
+                <button class="btn-close-scan" onclick="parentStopLiveScanner()">إلغاء الكاميرا ✖</button>
             </div>
 
             <script>
-                function loginWithToken(tokenVal) {
-                    if (tokenVal) {
-                        localStorage.setItem('bisher_chat_token', tokenVal);
-                        window.location.href = '/?token=' + tokenVal;
-                    }
-                }
-
-                function login() {
-                    const val = document.getElementById('tkInput').value.trim();
-                    if (val) {
-                        loginWithToken(val);
-                    } else {
-                        alert('يرجى مسح الـ QR أو إدخال الكود!');
-                    }
-                }
-
                 let videoStream = null;
                 let scanAnimFrame = null;
 
-                async function startLiveScanner() {
+                async function parentStartLiveScanner() {
                     document.getElementById('scannerModal').style.display = 'flex';
                     const video = document.getElementById('videoFeed');
                     try {
@@ -869,7 +1084,7 @@ def index():
                         requestAnimationFrame(tickScanner);
                     } catch(err) {
                         alert("يرجى إعطاء صلاحية استخدام الكاميرا لمسح الـ QR!");
-                        stopLiveScanner();
+                        parentStopLiveScanner();
                     }
                 }
 
@@ -885,15 +1100,12 @@ def index():
                         const code = jsQR(imageData.data, imageData.width, imageData.height);
 
                         if (code && code.data) {
-                            stopLiveScanner();
+                            parentStopLiveScanner();
                             try {
                                 const url = new URL(code.data);
                                 const token = url.searchParams.get('token');
-                                if (token) {
-                                    loginWithToken(token);
-                                } else {
-                                    loginWithToken(code.data);
-                                }
+                                if (token) loginWithToken(token);
+                                else loginWithToken(code.data);
                             } catch(err) {
                                 loginWithToken(code.data);
                             }
@@ -903,13 +1115,29 @@ def index():
                     scanAnimFrame = requestAnimationFrame(tickScanner);
                 }
 
-                function stopLiveScanner() {
+                function parentStopLiveScanner() {
                     if (scanAnimFrame) cancelAnimationFrame(scanAnimFrame);
                     if (videoStream) {
-                        videoStream.getTracks().forEach(track => track.stop());
+                        videoStream.getTracks().forEach(track => {
+                            track.stop();
+                            track.enabled = false;
+                        });
                         videoStream = null;
                     }
                     document.getElementById('scannerModal').style.display = 'none';
+                }
+
+                function loginWithToken(tokenVal) {
+                    if (tokenVal) {
+                        localStorage.setItem('bisher_chat_token', tokenVal);
+                        window.location.href = '/?token=' + tokenVal;
+                    }
+                }
+
+                function login() {
+                    const val = document.getElementById('tkInput').value.trim();
+                    if (val) loginWithToken(val);
+                    else alert('يرجى مسح الـ QR أو إدخال الكود!');
                 }
 
                 function scanQRFromImage(input) {
@@ -931,11 +1159,8 @@ def index():
                                     try {
                                         const url = new URL(code.data);
                                         const token = url.searchParams.get('token');
-                                        if (token) {
-                                            loginWithToken(token);
-                                        } else {
-                                            loginWithToken(code.data);
-                                        }
+                                        if (token) loginWithToken(token);
+                                        else loginWithToken(code.data);
                                     } catch(err) {
                                         loginWithToken(code.data);
                                     }
@@ -955,7 +1180,7 @@ def index():
         
     slot_id, user_data = get_slot_by_token(token)
     if not user_data:
-        return "<h2 style='color:white; background:#111b21; padding:20px; text-align:center;'>❌ الكود غير صالح أو تم طرده! يرجى إعادة تسجيل الدخول.</h2>", 403
+        return "<h2 style='color:white; background:#111b21; padding:20px; text-align:center;'>❌ الكود غير صالح أو تم طرده!</h2>", 403
         
     base_url = request.host_url.rstrip('/')
     return render_template_string(HTML_PAGE, user_data=user_data, current_slot_id=slot_id, all_slots=slots, statuses=statuses, base_url=base_url)
@@ -971,13 +1196,27 @@ def update_profile():
         return jsonify({"success": True})
     return jsonify({"success": False}), 400
 
+@app.route('/post_status', methods=['POST'])
+def post_status():
+    data = request.json
+    slot_id, user_data = get_slot_by_token(data.get('token'))
+    if user_data:
+        statuses.insert(0, {
+            "name": user_data['name'],
+            "avatar": user_data['avatar'],
+            "text": data.get('text', ''),
+            "media": data.get('media', ''),
+            "time": datetime.now().strftime("%I:%M %p")
+        })
+        return jsonify({"success": True})
+    return jsonify({"success": False}), 400
+
 @app.route('/kick_user', methods=['POST'])
 def kick_user():
     data = request.json
     if data.get('admin_token') == ADMIN_TOKEN:
         slot_id = int(data.get('slot_id'))
         if slot_id in slots and slot_id != 0:
-            # إعادة تعيين التوكن ليبقى ثابتاً بصيغة واضحة
             slots[slot_id]['token'] = f"bsher-user-code-0{slot_id}" if slot_id < 10 else f"bsher-user-code-{slot_id}"
             slots[slot_id]['name'] = f"مستخدم #{slot_id}"
             slots[slot_id]['bio'] = "أهلاً بي في bisher chat"
@@ -1000,14 +1239,35 @@ def handle_private_message(data):
     slot_id, user_data = get_slot_by_token(data.get('token'))
     if user_data:
         now_time = datetime.now().strftime("%I:%M %p")
+        msg_id = data.get('msg_id')
+        message_reactions[msg_id] = {}
         emit('receive_private_message', {
             'room': data.get('room'),
             'sender_slot': slot_id,
             'sender_name': user_data['name'],
+            'msg_id': msg_id,
             'msg_type': data.get('msg_type', 'text'),
             'encrypted_data': data.get('encrypted_data'),
-            'time': now_time
+            'time': now_time,
+            'reactions': {}
         }, room=data.get('room'))
+
+@socketio.on('send_reaction')
+def handle_reaction(data):
+    msg_id = data.get('msg_id')
+    emoji = data.get('emoji')
+    slot_id, user_data = get_slot_by_token(data.get('token'))
+    if user_data and msg_id in message_reactions:
+        reactions = message_reactions[msg_id]
+        if emoji not in reactions:
+            reactions[emoji] = []
+        if slot_id not in reactions[emoji]:
+            reactions[emoji].append(slot_id)
+        else:
+            reactions[emoji].remove(slot_id)
+            if not reactions[emoji]:
+                del reactions[emoji]
+        emit('update_reactions', {'msg_id': msg_id, 'reactions': reactions}, room=data.get('room'))
 
 @socketio.on('signal')
 def handle_signal(data):
