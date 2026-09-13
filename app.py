@@ -143,7 +143,6 @@ HTML_PAGE = """
             <p style="font-size:12px; color:#8696a0; margin-bottom:10px;">اختر متصل لفتح شات خاص مشفر معه (1-on-1):</p>
             
             {% if user_data.type == 'admin' %}
-                <!-- المشرف يرون جميع المستخدَمين من 1 إلى 19 -->
                 {% for sid, sinfo in all_slots.items() %}
                 {% if sid != 0 %}
                 <div class="contact-item" onclick="openPrivateChat({{ sid }}, '{{ sinfo.name }}', '{{ sinfo.avatar }}')">
@@ -156,7 +155,6 @@ HTML_PAGE = """
                 {% endif %}
                 {% endfor %}
             {% else %}
-                <!-- المستخدم العادي يرى المشرف (بشر) فقط! -->
                 <div class="contact-item" onclick="openPrivateChat(0, '{{ all_slots[0].name }}', '{{ all_slots[0].avatar }}')">
                     <img src="{{ all_slots[0].avatar }}" class="contact-avatar">
                     <div>
@@ -737,11 +735,14 @@ def index():
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>bisher chat - تفعيل التطبيق</title>
+            <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
             <style>
                 body { background: #0b141a; color: white; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
                 .card { background: #202c33; padding: 25px; border-radius: 12px; width: 85%; max-width: 350px; border: 1px solid #00a884; text-align: center; }
-                input { width: 100%; padding: 12px; margin: 15px 0; border-radius: 8px; border: 1px solid #3b4a54; background: #2a3942; color: white; font-size: 14px; text-align: center; outline: none; }
-                button { width: 100%; padding: 12px; background: #00a884; border: none; color: #111b21; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; }
+                input[type="text"] { width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid #3b4a54; background: #2a3942; color: white; font-size: 14px; text-align: center; outline: none; }
+                .btn-main { width: 100%; padding: 12px; background: #00a884; border: none; color: #111b21; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; margin-bottom: 10px; }
+                .btn-qr { width: 100%; padding: 12px; background: #2a3942; border: 1px solid #00a884; color: #00a884; border-radius: 8px; font-weight: bold; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+                .divider { margin: 12px 0; color: #8696a0; font-size: 11px; }
             </style>
         </head>
         <body>
@@ -751,18 +752,68 @@ def index():
             </script>
             <div class="card">
                 <h3 style="color:#00a884; margin-bottom: 8px;">bisher chat 🔒</h3>
-                <p style="font-size:12px; color:#8696a0;">أدخل الكود السرّي الخافيك من المشرف لتسجيل دخولك:</p>
-                <input type="text" id="tkInput" placeholder="أدخل كود المستخدم هنا...">
-                <button onclick="login()">دخول الشات 🚀</button>
+                <p style="font-size:12px; color:#8696a0;">أدخل الكود السرّي أو ارفع صورة الـ QR الخاص بك:</p>
+                
+                <input type="text" id="tkInput" placeholder="أدخل الكود السرّي هنا...">
+                <button class="btn-main" onclick="login()">دخول الشات 🚀</button>
+                
+                <div class="divider">─── أو ───</div>
+                
+                <button class="btn-qr" onclick="document.getElementById('qrFileInput').click()">📷 مسح الـ QR من صورة</button>
+                <input type="file" id="qrFileInput" accept="image/*" style="display:none;" onchange="scanQRFromImage(this)">
             </div>
+
             <script>
+                function loginWithToken(tokenVal) {
+                    if (tokenVal) {
+                        localStorage.setItem('bisher_chat_token', tokenVal);
+                        window.location.href = '/?token=' + tokenVal;
+                    }
+                }
+
                 function login() {
                     const val = document.getElementById('tkInput').value.trim();
                     if (val) {
-                        localStorage.setItem('bisher_chat_token', val);
-                        window.location.href = '/?token=' + val;
+                        loginWithToken(val);
                     } else {
-                        alert('يرجى إدخال الكود الخاص بك!');
+                        alert('يرجى إدخال الكود أو رفع صورة الـ QR!');
+                    }
+                }
+
+                function scanQRFromImage(input) {
+                    if (input.files && input.files[0]) {
+                        const file = input.files[0];
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            const img = new Image();
+                            img.onload = function() {
+                                const canvas = document.createElement('canvas');
+                                const ctx = canvas.getContext('2d');
+                                canvas.width = img.width;
+                                canvas.height = img.height;
+                                ctx.drawImage(img, 0, 0, img.width, img.height);
+                                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                                const code = jsQR(imageData.data, imageData.width, imageData.height);
+                                
+                                if (code && code.data) {
+                                    try {
+                                        const url = new URL(code.data);
+                                        const token = url.searchParams.get('token');
+                                        if (token) {
+                                            loginWithToken(token);
+                                        } else {
+                                            loginWithToken(code.data);
+                                        }
+                                    } catch(err) {
+                                        loginWithToken(code.data);
+                                    }
+                                } else {
+                                    alert('❌ لم يتم العثور على رمز QR واضح بالصورة! يرجى اختيار صورة أسرع وأوضح.');
+                                }
+                            };
+                            img.src = e.target.result;
+                        };
+                        reader.readAsDataURL(file);
                     }
                 }
             </script>
