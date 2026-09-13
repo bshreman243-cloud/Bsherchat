@@ -5,7 +5,7 @@ from flask import Flask, render_template_string, request, jsonify
 from flask_socketio import SocketIO, emit, join_room
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'bsher-e2ee-master-key-2026'
+app.config['SECRET_KEY'] = 'bsher-e2ee-v3-master-key-2026'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", max_http_buffer_size=50000000)
 
 ADMIN_TOKEN = "bsher-admin-master-key-2026"
@@ -52,7 +52,8 @@ HTML_PAGE = """
         
         /* Main Header */
         .header { background-color: #202c33; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #222d34; height: 60px; }
-        .user-info { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+        .user-info { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+        .btn-back { display: none; background: none; border: none; color: #00a884; font-size: 22px; cursor: pointer; padding: 0 4px; }
         .avatar { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; border: 1.5px solid #00a884; }
         .user-details h4 { font-size: 15px; color: #e9edef; font-weight: 600; }
         .user-details p { font-size: 11px; color: #8696a0; }
@@ -68,7 +69,7 @@ HTML_PAGE = """
         .content { flex: 1; overflow-y: auto; display: none; padding: 12px; background-color: #0b141a; -webkit-overflow-scrolling: touch; }
         .content.active { display: block; }
         
-        /* Contact List Container with extra bottom padding for User #19 */
+        /* Contact List Container */
         #contactListContainer { padding-bottom: 120px; }
         .contact-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: #202c33; border-radius: 10px; margin-bottom: 8px; cursor: pointer; border: 1px solid #222d34; }
         .contact-item:hover { background: #2a3942; }
@@ -107,14 +108,16 @@ HTML_PAGE = """
         .profile-form { display: flex; flex-direction: column; gap: 12px; max-width: 400px; margin: 0 auto; background: #202c33; padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 100px; }
         .profile-avatar-preview { width: 90px; height: 90px; border-radius: 50%; object-fit: cover; margin: 0 auto 10px auto; border: 3px solid #00a884; }
 
-        /* Video Call Modal */
-        #callModal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(11,20,26,0.95); z-index: 9999; flex-direction: column; align-items: center; justify-content: space-between; padding: 20px; }
-        .video-container { display: flex; flex-direction: column; width: 100%; max-width: 400px; height: 75%; position: relative; gap: 10px; }
+        /* Call Modal View */
+        #callModal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(11,20,26,0.96); z-index: 9999; flex-direction: column; align-items: center; justify-content: space-between; padding: 30px 20px; }
+        .call-user-avatar { width: 110px; height: 110px; border-radius: 50%; border: 3px solid #00a884; object-fit: cover; margin-top: 20px; }
+        .video-container { display: flex; flex-direction: column; width: 100%; max-width: 400px; height: 60%; position: relative; gap: 10px; }
         video { width: 100%; height: 100%; background: #000; border-radius: 12px; object-fit: cover; }
-        #localVideo { position: absolute; top: 10px; right: 10px; width: 100px; height: 140px; border: 2px solid #00a884; z-index: 10; }
+        #localVideo { position: absolute; top: 10px; right: 10px; width: 90px; height: 130px; border: 2px solid #00a884; z-index: 10; border-radius: 8px; }
+        .call-controls { display: flex; gap: 20px; margin-bottom: 20px; align-items: center; }
+        .btn-ctrl { background: #2a3942; color: #00a884; border: none; width: 50px; height: 50px; border-radius: 50%; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
         .btn-end-call { background: #ea868f; color: white; border: none; width: 60px; height: 60px; border-radius: 50%; font-size: 24px; cursor: pointer; }
     </style>
-    <!-- Socket.io & CryptoJS Client-side Encryption -->
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
 </head>
@@ -123,7 +126,8 @@ HTML_PAGE = """
     <!-- Header -->
     <div class="header">
         <div class="user-info">
-            <img src="{{ user_data.avatar }}" class="avatar">
+            <button class="btn-back" id="btnBackToContacts" onclick="closePrivateChat()">⬅️</button>
+            <img src="{{ user_data.avatar }}" class="avatar" id="hdrAvatar">
             <div class="user-details">
                 <h4 id="hdrChatTarget">{{ user_data.name }}</h4>
                 <p id="hdrStatusText">🔒 مشفر بالكامل (E2EE)</p>
@@ -136,7 +140,7 @@ HTML_PAGE = """
     </div>
 
     <!-- Navigation Tabs -->
-    <div class="nav-tabs">
+    <div class="nav-tabs" id="navTabsBar">
         <button class="tab-btn active" onclick="switchTab('contactsTab')">💬 المحادثات الخاصّة</button>
         <button class="tab-btn" onclick="switchTab('statusTab')">⭕ الحالات</button>
         <button class="tab-btn" onclick="switchTab('profileTab')">👤 البروفايل</button>
@@ -240,25 +244,37 @@ HTML_PAGE = """
         <button class="btn-send" onclick="sendMsg()">➤</button>
     </div>
 
-    <!-- Video Call Modal -->
+    <!-- Call Overlay Modal -->
     <div id="callModal">
-        <h3 id="callStatusText" style="color:#00a884; margin-top:10px;">جاري الاتصال المباشر المشفر...</h3>
-        <div class="video-container">
+        <h3 id="callStatusText" style="color:#00a884; margin-top:10px;">جاري الاتصال...</h3>
+        
+        <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" class="call-user-avatar" id="callAvatar">
+
+        <div class="video-container" id="videoContainer" style="display:none;">
             <video id="remoteVideo" autoplay playsinline></video>
             <video id="localVideo" autoplay playsinline muted></video>
         </div>
-        <div style="margin-bottom:20px;">
+
+        <div class="call-controls">
+            <button class="btn-ctrl" id="btnToggleMic" onclick="toggleMic()">🎙️</button>
             <button class="btn-end-call" onclick="endCall()">📞</button>
+            <button class="btn-ctrl" id="btnToggleSpeaker" onclick="toggleSpeaker()">🔊</button>
         </div>
     </div>
 
     <script>
         const currentToken = "{{ user_data.token }}";
         const mySlotId = {{ current_slot_id }};
+        const myDefaultName = "{{ user_data.name }}";
+        const myDefaultAvatar = "{{ user_data.avatar }}";
+        
         let activeTargetSlot = null;
         let activeRoom = null;
+        let activeTargetName = "";
+        let activeTargetAvatar = "";
+        
         let secretKey = "bsher-e2ee-key-2026";
-        let currentAvatarData = "{{ user_data.avatar }}";
+        let currentAvatarData = myDefaultAvatar;
 
         const socket = io();
         socket.emit('join', { token: currentToken });
@@ -272,21 +288,41 @@ HTML_PAGE = """
                 const bytes = CryptoJS.AES.decrypt(ciphertext, secretKey);
                 return bytes.toString(CryptoJS.enc.Utf8);
             } catch(e) {
-                return "[رسالة غير صالحة فك تشفيرها]";
+                return "[رسالة غير صالحة]";
             }
         }
 
         function openPrivateChat(targetSlotId, targetName, targetAvatar) {
             activeTargetSlot = targetSlotId;
+            activeTargetName = targetName;
+            activeTargetAvatar = targetAvatar;
+
             document.getElementById('contactListContainer').style.display = 'none';
             document.getElementById('activeChatArea').style.display = 'flex';
             document.getElementById('inputBar').style.display = 'flex';
             document.getElementById('callActionsBar').style.display = 'flex';
+            document.getElementById('btnBackToContacts').style.display = 'block';
+
             document.getElementById('hdrChatTarget').innerText = targetName;
+            document.getElementById('hdrAvatar').src = targetAvatar;
             
             activeRoom = (mySlotId < targetSlotId) ? `room_${mySlotId}_${targetSlotId}` : `room_${targetSlotId}_${mySlotId}`;
             socket.emit('join_private_room', { room: activeRoom });
             document.getElementById('chatBox').innerHTML = `<div style="text-align:center; font-size:11px; color:#00a884; margin:10px 0;">🔒 المحادثة مشفرة بالكامل بينك وبين ${targetName} (E2EE)</div>`;
+        }
+
+        function closePrivateChat() {
+            activeTargetSlot = null;
+            activeRoom = null;
+
+            document.getElementById('contactListContainer').style.display = 'block';
+            document.getElementById('activeChatArea').style.display = 'none';
+            document.getElementById('inputBar').style.display = 'none';
+            document.getElementById('callActionsBar').style.display = 'none';
+            document.getElementById('btnBackToContacts').style.display = 'none';
+
+            document.getElementById('hdrChatTarget').innerText = myDefaultName;
+            document.getElementById('hdrAvatar').src = myDefaultAvatar;
         }
 
         socket.on('receive_private_message', function(data) {
@@ -294,7 +330,6 @@ HTML_PAGE = """
             
             const chatBox = document.getElementById("chatBox");
             const div = document.createElement("div");
-            
             const decryptedContent = decryptPayload(data.encrypted_data);
             
             let contentHtml = "";
@@ -385,37 +420,83 @@ HTML_PAGE = """
             }
         }
 
+        /* Fixed Audio/Video WebRTC Logic with Speaker & Mic Controls */
         let localStream, peerConnection;
+        let isMicMuted = false, isSpeakerMuted = false;
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
         async function startCall(isVideo) {
             if (!activeRoom) return;
             document.getElementById('callModal').style.display = 'flex';
+            document.getElementById('callAvatar').src = activeTargetAvatar || myDefaultAvatar;
+            document.getElementById('callStatusText').innerText = isVideo ? "جاري الاتصال المرئي..." : "جاري الاتصال الصوتي...";
+            
+            if (isVideo) {
+                document.getElementById('videoContainer').style.display = 'flex';
+                document.getElementById('callAvatar').style.display = 'none';
+            } else {
+                document.getElementById('videoContainer').style.display = 'none';
+                document.getElementById('callAvatar').style.display = 'block';
+            }
+
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ video: isVideo, audio: true });
-                document.getElementById('localVideo').srcObject = localStream;
+                if (isVideo) document.getElementById('localVideo').srcObject = localStream;
+                
                 peerConnection = new RTCPeerConnection(config);
                 localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-                peerConnection.ontrack = e => { document.getElementById('remoteVideo').srcObject = e.streams[0]; };
-                peerConnection.onicecandidate = e => { if (e.candidate) socket.emit('signal', { room: activeRoom, token: currentToken, type: 'candidate', candidate: e.candidate }); };
+                
+                peerConnection.ontrack = e => {
+                    const remoteVid = document.getElementById('remoteVideo');
+                    remoteVid.srcObject = e.streams[0];
+                };
+                
+                peerConnection.onicecandidate = e => {
+                    if (e.candidate) socket.emit('signal', { room: activeRoom, token: currentToken, type: 'candidate', candidate: e.candidate });
+                };
 
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
-                socket.emit('signal', { room: activeRoom, token: currentToken, type: 'offer', offer: offer });
-            } catch(e) { alert("يرجى إعطاء صلاحيات الكاميرا والميكروفون!"); endCall(); }
+                socket.emit('signal', { room: activeRoom, token: currentToken, type: 'offer', offer: offer, isVideo: isVideo });
+            } catch(e) {
+                alert("يرجى السماح بصلاحيات الميكروفون والكاميرا!");
+                endCall();
+            }
         }
 
         socket.on('signal', async function(data) {
             if (data.token === currentToken || data.room !== activeRoom) return;
+            
             if (data.type === 'offer') {
-                if (confirm("مكالمة واردة مشفرة P2P! هل تريد الرد؟")) {
+                const callTypeLabel = data.isVideo ? "مكالمة فيديو مرئية 📹" : "مكالمة صوتية 📞";
+                if (confirm(`مكالمة واردة: ${callTypeLabel}! هل تريد الرد؟`)) {
                     document.getElementById('callModal').style.display = 'flex';
-                    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                    document.getElementById('localVideo').srcObject = localStream;
+                    document.getElementById('callAvatar').src = activeTargetAvatar || myDefaultAvatar;
+                    document.getElementById('callStatusText').innerText = "المكالمة متصلة 🟢";
+                    
+                    if (data.isVideo) {
+                        document.getElementById('videoContainer').style.display = 'flex';
+                        document.getElementById('callAvatar').style.display = 'none';
+                    } else {
+                        document.getElementById('videoContainer').style.display = 'none';
+                        document.getElementById('callAvatar').style.display = 'block';
+                    }
+
+                    localStream = await navigator.mediaDevices.getUserMedia({ video: data.isVideo, audio: true });
+                    if (data.isVideo) document.getElementById('localVideo').srcObject = localStream;
+                    
                     peerConnection = new RTCPeerConnection(config);
                     localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-                    peerConnection.ontrack = e => { document.getElementById('remoteVideo').srcObject = e.streams[0]; };
-                    peerConnection.onicecandidate = e => { if (e.candidate) socket.emit('signal', { room: activeRoom, token: currentToken, type: 'candidate', candidate: e.candidate }); };
+                    
+                    peerConnection.ontrack = e => {
+                        const remoteVid = document.getElementById('remoteVideo');
+                        remoteVid.srcObject = e.streams[0];
+                    };
+                    
+                    peerConnection.onicecandidate = e => {
+                        if (e.candidate) socket.emit('signal', { room: activeRoom, token: currentToken, type: 'candidate', candidate: e.candidate });
+                    };
+
                     await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
                     const answer = await peerConnection.createAnswer();
                     await peerConnection.setLocalDescription(answer);
@@ -423,10 +504,33 @@ HTML_PAGE = """
                 }
             } else if (data.type === 'answer' && peerConnection) {
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                document.getElementById('callStatusText').innerText = "المكالمة متصلة 🟢";
             } else if (data.type === 'candidate' && peerConnection) {
                 await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-            } else if (data.type === 'end') { endCall(false); }
+            } else if (data.type === 'end') {
+                endCall(false);
+            }
         });
+
+        function toggleMic() {
+            if (localStream) {
+                const audioTrack = localStream.getAudioTracks()[0];
+                if (audioTrack) {
+                    audioTrack.enabled = !audioTrack.enabled;
+                    isMicMuted = !audioTrack.enabled;
+                    document.getElementById('btnToggleMic').innerText = isMicMuted ? "🛑" : "🎙️";
+                }
+            }
+        }
+
+        function toggleSpeaker() {
+            const remoteVid = document.getElementById('remoteVideo');
+            if (remoteVid) {
+                remoteVid.muted = !remoteVid.muted;
+                isSpeakerMuted = remoteVid.muted;
+                document.getElementById('btnToggleSpeaker').innerText = isSpeakerMuted ? "🔇" : "🔊";
+            }
+        }
 
         function endCall(emitEvent = true) {
             if (emitEvent && activeRoom) socket.emit('signal', { room: activeRoom, token: currentToken, type: 'end' });
@@ -444,9 +548,11 @@ HTML_PAGE = """
             if (tabId !== 'contactsTab') {
                 document.getElementById('inputBar').style.display = 'none';
                 document.getElementById('callActionsBar').style.display = 'none';
+                document.getElementById('btnBackToContacts').style.display = 'none';
             } else if (activeRoom) {
                 document.getElementById('inputBar').style.display = 'flex';
                 document.getElementById('callActionsBar').style.display = 'flex';
+                document.getElementById('btnBackToContacts').style.display = 'block';
             }
         }
 
