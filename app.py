@@ -5,7 +5,7 @@ from flask import Flask, render_template_string, request, jsonify
 from flask_socketio import SocketIO, emit, join_room
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'bsher-e2ee-v9-master-key-2026'
+app.config['SECRET_KEY'] = 'bsher-e2ee-v10-master-key-2026'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", max_http_buffer_size=50000000)
 
 ADMIN_TOKEN = "bsher-admin-master-key-2026"
@@ -199,7 +199,7 @@ HTML_PAGE = """
     <div id="profileTab" class="content">
         <div class="profile-form">
             <img src="{{ user_data.avatar }}" class="profile-avatar-preview" id="previewProfileAvatar">
-            <button type="button" onclick="document.getElementById('avatarFileInput').click()" style="background:#2a3942; color:#00a884; border:1px solid #00a884; padding:8px; border-radius:6px; font-size:12px; font-weight:bold; cursor:pointer;">📷 تغيير الصورة من الهاتف</button>
+            <button type="button" onclick="document.getElementById('avatarFileInput').click()" style="background:#2a3942; color:#00a884; border:1px solid #00a884; padding:8px; border-radius:6px; font-size:12px; font-weight:bold; cursor:pointer;">📷 تغيير الصورة الشخصية</button>
             <input type="file" id="avatarFileInput" accept="image/*" style="display:none;" onchange="uploadAvatarFile(this)">
             
             <label style="font-size:12px; color:#8696a0; text-align:right;">الاسم الظاهر</label>
@@ -211,12 +211,21 @@ HTML_PAGE = """
             <button onclick="saveProfile()" style="background:#00a884; color:#111b21; border:none; padding:12px; border-radius:6px; font-weight:bold; cursor:pointer;">حفظ البيانات</button>
             
             <hr style="border-color:#222d34; margin:10px 0;">
-            <h4 style="color:#00a884; font-size:14px; text-align:right;">🔔 إعدادات الإشعارات والأصوات</h4>
-            <button type="button" onclick="requestNotificationPermission()" style="background:#2a3942; color:#e9edef; border:1px solid #00a884; padding:10px; border-radius:6px; font-size:12px; font-weight:bold; cursor:pointer;">🔔 تفعيل إشعارات الهاتف والخلفية</button>
-            <div style="display:flex; gap:10px; justify-content:center;">
-                <button type="button" onclick="playMsgSound()" style="background:#202c33; color:#00a884; border:1px solid #222d34; padding:8px; border-radius:6px; font-size:11px; cursor:pointer;">🎵 تجربة صوت الرسالة</button>
-                <button type="button" onclick="testRingtone()" style="background:#202c33; color:#00a884; border:1px solid #222d34; padding:8px; border-radius:6px; font-size:11px; cursor:pointer;">📞 تجربة نغمة الرنين</button>
+            <h4 style="color:#00a884; font-size:14px; text-align:right;">🔔 تخصيص النغمات من الهاتف (MP3)</h4>
+            
+            <label style="font-size:11px; color:#8696a0; text-align:right;">نغمة الرنين (اتصال)</label>
+            <button type="button" onclick="document.getElementById('ringAudioInput').click()" style="background:#2a3942; color:#e9edef; border:1px solid #00a884; padding:8px; border-radius:6px; font-size:11px; cursor:pointer;">🎵 اختيار نغمة رنين من الهاتف</button>
+            <input type="file" id="ringAudioInput" accept="audio/*" style="display:none;" onchange="saveCustomTone('ring', this)">
+
+            <label style="font-size:11px; color:#8696a0; text-align:right; margin-top:5px;">نغمة الرسائل</label>
+            <button type="button" onclick="document.getElementById('msgAudioInput').click()" style="background:#2a3942; color:#e9edef; border:1px solid #00a884; padding:8px; border-radius:6px; font-size:11px; cursor:pointer;">🎵 اختيار نغمة رسالة من الهاتف</button>
+            <input type="file" id="msgAudioInput" accept="audio/*" style="display:none;" onchange="saveCustomTone('msg', this)">
+
+            <div style="display:flex; gap:10px; justify-content:center; margin-top:8px;">
+                <button type="button" onclick="playMsgSound()" style="background:#202c33; color:#00a884; border:1px solid #222d34; padding:8px; border-radius:6px; font-size:11px; cursor:pointer;">▶ تجربة نغمة الرسالة</button>
+                <button type="button" onclick="testRingtone()" style="background:#202c33; color:#00a884; border:1px solid #222d34; padding:8px; border-radius:6px; font-size:11px; cursor:pointer;">▶ تجربة الرنين</button>
             </div>
+
             <button type="button" onclick="logout()" style="background:#ea868f; color:#842029; border:none; padding:8px; border-radius:6px; font-size:11px; font-weight:bold; margin-top:10px; cursor:pointer;">🚪 تغيير الكود / تسجيل الخروج</button>
         </div>
     </div>
@@ -288,6 +297,23 @@ HTML_PAGE = """
             }
         };
 
+        /* Custom Tone Manager */
+        function saveCustomTone(type, input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    if (type === 'ring') {
+                        localStorage.setItem('bisher_custom_ring', e.target.result);
+                        alert("✅ تم حفظ نغمة الرنين بنجاح!");
+                    } else {
+                        localStorage.setItem('bisher_custom_msg', e.target.result);
+                        alert("✅ تم حفظ نغمة الرسالة بنجاح!");
+                    }
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         let audioCtx = null;
         let ringtoneInterval = null;
@@ -299,6 +325,14 @@ HTML_PAGE = """
         }
 
         function playMsgSound() {
+            const customMsg = localStorage.getItem('bisher_custom_msg');
+            if (customMsg) {
+                try {
+                    const audio = new Audio(customMsg);
+                    audio.play();
+                    return;
+                } catch(e){}
+            }
             try {
                 const ctx = getAudioContext();
                 const osc = ctx.createOscillator();
@@ -317,6 +351,17 @@ HTML_PAGE = """
 
         function startRingtone() {
             stopRingtone();
+            const customRing = localStorage.getItem('bisher_custom_ring');
+            if (customRing) {
+                ringtoneInterval = setInterval(() => {
+                    try {
+                        const audio = new Audio(customRing);
+                        audio.play();
+                    } catch(e){}
+                }, 3000);
+                return;
+            }
+
             ringtoneInterval = setInterval(() => {
                 try {
                     const ctx = getAudioContext();
@@ -346,7 +391,7 @@ HTML_PAGE = """
 
         function testRingtone() {
             startRingtone();
-            setTimeout(stopRingtone, 3600);
+            setTimeout(stopRingtone, 4000);
         }
 
         function requestNotificationPermission() {
@@ -527,7 +572,15 @@ HTML_PAGE = """
 
         let localStream = null, peerConnection = null;
         let isMicMuted = false, isSpeakerMuted = false;
-        const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+        
+        /* Multi-STUN Servers Configuration for Robust Call Connections */
+        const config = { 
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' }
+            ] 
+        };
 
         async function startCall(isVideo) {
             if (!activeRoom) return;
@@ -568,8 +621,15 @@ HTML_PAGE = """
             }
         }
 
+        /* FIXED: Global WebRTC Incoming Call Listener with Auto-Room Binding */
         socket.on('signal', async function(data) {
-            if (data.token === currentToken || data.room !== activeRoom) return;
+            if (data.token === currentToken) return;
+            
+            if (!activeRoom && data.type === 'offer') {
+                activeRoom = data.room;
+            }
+
+            if (data.room !== activeRoom) return;
             
             if (data.type === 'offer') {
                 startRingtone();
@@ -745,7 +805,6 @@ def index():
                 .btn-qr { width: 100%; padding: 10px; background: #2a3942; border: 1px solid #3b4a54; color: #e9edef; border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
                 .divider { margin: 10px 0; color: #8696a0; font-size: 11px; }
 
-                /* Scanner Modal Overlay */
                 #scannerModal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; z-index: 10000; flex-direction: column; align-items: center; justify-content: space-between; padding: 20px; }
                 .scan-view { width: 100%; max-width: 320px; height: 320px; position: relative; border-radius: 16px; overflow: hidden; border: 3px solid #00a884; margin-top: 40px; }
                 #videoFeed { width: 100%; height: 100%; object-fit: cover; }
@@ -774,7 +833,6 @@ def index():
                 <button class="btn-main" onclick="login()">دخول الشات 🚀</button>
             </div>
 
-            <!-- Live Camera Modal -->
             <div id="scannerModal">
                 <h4 style="color:#00a884; margin-top:15px;">وجه الكاميرا نحو رمز الـ QR 📸</h4>
                 <div class="scan-view">
@@ -802,14 +860,12 @@ def index():
                     }
                 }
 
-                /* Live Camera Scanner Engine */
                 let videoStream = null;
                 let scanAnimFrame = null;
 
                 async function startLiveScanner() {
                     document.getElementById('scannerModal').style.display = 'flex';
                     const video = document.getElementById('videoFeed');
-                    
                     try {
                         videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
                         video.srcObject = videoStream;
