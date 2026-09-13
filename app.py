@@ -5,7 +5,7 @@ from flask import Flask, render_template_string, request, jsonify
 from flask_socketio import SocketIO, emit, join_room
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'bsher-e2ee-v14-master-key-2026'
+app.config['SECRET_KEY'] = 'bsher-e2ee-v15-master-key-2026'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", max_http_buffer_size=50000000)
 
 ADMIN_TOKEN = "bsher-admin-master-key-2026"
@@ -32,6 +32,8 @@ for i in range(1, 20):
     }
 
 statuses = []
+chat_history = {}
+message_reactions = {}
 
 def get_slot_by_token(token):
     for slot_id, data in slots.items():
@@ -82,14 +84,12 @@ HTML_PAGE = """
         .chat-media { max-width: 100%; max-height: 220px; border-radius: 8px; margin-top: 4px; }
         audio { width: 220px; height: 35px; margin-top: 4px; }
         
-        /* Reaction styling */
         .msg-reactions { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
         .reaction-badge { background: #111b21; padding: 2px 6px; border-radius: 12px; font-size: 12px; border: 1px solid #222d34; display: inline-flex; align-items: center; gap: 2px; }
         .reaction-trigger { font-size: 12px; cursor: pointer; opacity: 0.7; margin-right: 6px; }
         .reaction-popup { display: none; position: absolute; background: #202c33; border: 1px solid #3b4a54; border-radius: 20px; padding: 4px 8px; gap: 6px; z-index: 100; bottom: 100%; right: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
         .reaction-popup span { cursor: pointer; font-size: 16px; padding: 2px; }
 
-        /* Emoji Picker Box */
         #emojiPicker { display: none; position: absolute; bottom: 65px; left: 10px; background: #202c33; border: 1px solid #3b4a54; border-radius: 10px; padding: 10px; width: 280px; grid-template-columns: repeat(6, 1fr); gap: 8px; text-align: center; z-index: 999; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
         #emojiPicker span { font-size: 20px; cursor: pointer; padding: 4px; border-radius: 4px; }
         #emojiPicker span:hover { background: #2a3942; }
@@ -269,7 +269,6 @@ HTML_PAGE = """
     </div>
     {% endif %}
 
-    <!-- Emoji Picker Box -->
     <div id="emojiPicker">
         <span onclick="insertEmoji('😊')">😊</span>
         <span onclick="insertEmoji('😂')">😂</span>
@@ -485,8 +484,10 @@ HTML_PAGE = """
             document.getElementById('hdrAvatar').src = targetAvatar;
             
             activeRoom = (mySlotId < targetSlotId) ? `room_${mySlotId}_${targetSlotId}` : `room_${targetSlotId}_${mySlotId}`;
-            socket.emit('join_private_room', { room: activeRoom });
+            
+            // Clear current chat box and request history
             document.getElementById('chatBox').innerHTML = `<div style="text-align:center; font-size:11px; color:#00a884; margin:10px 0;">🔒 المحادثة مشفرة بالكامل بينك وبين ${targetName} (E2EE)</div>`;
+            socket.emit('join_private_room', { room: activeRoom });
 
             history.pushState({ inChat: true }, "");
         }
@@ -510,17 +511,27 @@ HTML_PAGE = """
             }
         }
 
+        // Load historical messages when entering room
+        socket.on('load_history', function(historyMessages) {
+            const chatBox = document.getElementById("chatBox");
+            historyMessages.forEach(data => {
+                appendMessage(data, false);
+            });
+            chatBox.scrollTop = chatBox.scrollHeight;
+        });
+
         socket.on('receive_private_message', function(data) {
             if (data.sender_slot !== mySlotId) {
                 playMsgSound();
             }
-
             if (data.room !== activeRoom) return;
-            appendMessage(data);
+            appendMessage(data, true);
         });
 
-        function appendMessage(data) {
+        function appendMessage(data, autoScroll = true) {
             const chatBox = document.getElementById("chatBox");
+            if (document.getElementById("msg_" + data.msg_id)) return; // prevent duplication
+
             const div = document.createElement("div");
             div.id = "msg_" + data.msg_id;
             const decryptedContent = decryptPayload(data.encrypted_data);
@@ -558,7 +569,9 @@ HTML_PAGE = """
             }
             
             chatBox.appendChild(div);
-            chatBox.scrollTop = chatBox.scrollHeight;
+            if (autoScroll) {
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
 
             if (data.reactions) {
                 updateReactionsUI(data.msg_id, data.reactions);
@@ -641,11 +654,8 @@ HTML_PAGE = """
                     recordStream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     let options = { mimeType: 'audio/webm' };
                     if (!MediaRecorder.isTypeSupported('audio/webm')) {
-                        if (MediaRecorder.isTypeSupported('audio/mp4')) {
-                            options = { mimeType: 'audio/mp4' };
-                        } else {
-                            options = {};
-                        }
+                        if (MediaRecorder.isTypeSupported('audio/mp4')) options = { mimeType: 'audio/mp4' };
+                        else options = {};
                     }
                     mediaRecorder = new MediaRecorder(recordStream, options);
                     audioChunks = [];
@@ -653,10 +663,7 @@ HTML_PAGE = """
                     
                     mediaRecorder.onstop = () => {
                         if (recordStream) {
-                            recordStream.getTracks().forEach(track => {
-                                track.stop();
-                                track.enabled = false;
-                            });
+                            recordStream.getTracks().forEach(track => { track.stop(); track.enabled = false; });
                             recordStream = null;
                         }
                         msgCounter++;
@@ -677,14 +684,9 @@ HTML_PAGE = """
                     alert("يرجى السماح بصلاحية الميكروفون!");
                 }
             } else {
-                if (mediaRecorder) {
-                    mediaRecorder.stop();
-                }
+                if (mediaRecorder) mediaRecorder.stop();
                 if (recordStream) {
-                    recordStream.getTracks().forEach(track => {
-                        track.stop();
-                        track.enabled = false;
-                    });
+                    recordStream.getTracks().forEach(track => { track.stop(); track.enabled = false; });
                     recordStream = null;
                 }
                 isRecording = false;
@@ -746,9 +748,7 @@ HTML_PAGE = """
 
         socket.on('signal', async function(data) {
             if (data.token === currentToken) return;
-            if (!activeRoom && data.type === 'offer') {
-                activeRoom = data.room;
-            }
+            if (!activeRoom && data.type === 'offer') activeRoom = data.room;
             if (data.room !== activeRoom) return;
             
             if (data.type === 'offer') {
@@ -846,10 +846,7 @@ HTML_PAGE = """
             if (emitEvent && activeRoom) socket.emit('signal', { room: activeRoom, token: currentToken, type: 'end' });
             
             if (localStream) {
-                localStream.getTracks().forEach(track => {
-                    track.stop();
-                    track.enabled = false;
-                });
+                localStream.getTracks().forEach(track => { track.stop(); track.enabled = false; });
                 localStream = null;
             }
             if (peerConnection) {
@@ -927,12 +924,39 @@ HTML_PAGE = """
                 body: JSON.stringify({ token: currentToken, text: text, media: currentStatusMedia })
             }).then(res => res.json()).then(data => {
                 if (data.success) {
-                    location.reload();
-                } else {
-                    alert("فشل نشر الحالة!");
+                    document.getElementById('statusText').value = "";
+                    currentStatusMedia = "";
                 }
             });
         }
+
+        socket.on('new_status_broadcast', function(st) {
+            const statusList = document.getElementById('statusList');
+            const div = document.createElement('div');
+            div.className = 'status-card';
+            
+            let mediaHtml = '';
+            if (st.media) {
+                if (st.media.includes('video') || st.media.startsWith('data:video')) {
+                    mediaHtml = `<video src="${st.media}" controls class="chat-media"></video>`;
+                } else {
+                    mediaHtml = `<img src="${st.media}" class="chat-media">`;
+                }
+            }
+
+            div.innerHTML = `
+                <div class="status-header">
+                    <img src="${st.avatar}">
+                    <div>
+                        <h4 style="font-size:13px; color:#e9edef;">${st.name}</h4>
+                        <span style="font-size:10px; color:#8696a0;">${st.time}</span>
+                    </div>
+                </div>
+                ${st.text ? `<p style="font-size:14px; color:#00a884;">${st.text}</p>` : ''}
+                ${mediaHtml}
+            `;
+            statusList.insertBefore(div, statusList.firstChild);
+        });
 
         function kickUser(slotId) {
             if (confirm('هل أنت تأكد من إعادة تعيين كود هذا المستخدم؟')) {
@@ -992,10 +1016,7 @@ HTML_PAGE = """
         function stopLiveScanner() {
             if (scanAnimFrame) cancelAnimationFrame(scanAnimFrame);
             if (videoStream) {
-                videoStream.getTracks().forEach(track => {
-                    track.stop();
-                    track.enabled = false;
-                });
+                videoStream.getTracks().forEach(track => { track.stop(); track.enabled = false; });
                 videoStream = null;
             }
             document.getElementById('scannerModal').style.display = 'none';
@@ -1011,8 +1032,6 @@ HTML_PAGE = """
 </body>
 </html>
 """
-
-message_reactions = {}
 
 @app.route('/')
 def index():
@@ -1118,10 +1137,7 @@ def index():
                 function parentStopLiveScanner() {
                     if (scanAnimFrame) cancelAnimationFrame(scanAnimFrame);
                     if (videoStream) {
-                        videoStream.getTracks().forEach(track => {
-                            track.stop();
-                            track.enabled = false;
-                        });
+                        videoStream.getTracks().forEach(track => { track.stop(); track.enabled = false; });
                         videoStream = null;
                     }
                     document.getElementById('scannerModal').style.display = 'none';
@@ -1201,13 +1217,15 @@ def post_status():
     data = request.json
     slot_id, user_data = get_slot_by_token(data.get('token'))
     if user_data:
-        statuses.insert(0, {
+        new_st = {
             "name": user_data['name'],
             "avatar": user_data['avatar'],
             "text": data.get('text', ''),
             "media": data.get('media', ''),
             "time": datetime.now().strftime("%I:%M %p")
-        })
+        }
+        statuses.insert(0, new_st)
+        socketio.emit('new_status_broadcast', new_st)
         return jsonify({"success": True})
     return jsonify({"success": False}), 400
 
@@ -1232,17 +1250,21 @@ def on_join(data):
 
 @socketio.on('join_private_room')
 def on_join_private_room(data):
-    join_room(data.get('room'))
+    room = data.get('room')
+    join_room(room)
+    if room in chat_history:
+        emit('load_history', chat_history[room])
 
 @socketio.on('send_private_message')
 def handle_private_message(data):
     slot_id, user_data = get_slot_by_token(data.get('token'))
     if user_data:
+        room = data.get('room')
         now_time = datetime.now().strftime("%I:%M %p")
         msg_id = data.get('msg_id')
-        message_reactions[msg_id] = {}
-        emit('receive_private_message', {
-            'room': data.get('room'),
+        
+        msg_obj = {
+            'room': room,
             'sender_slot': slot_id,
             'sender_name': user_data['name'],
             'msg_id': msg_id,
@@ -1250,7 +1272,14 @@ def handle_private_message(data):
             'encrypted_data': data.get('encrypted_data'),
             'time': now_time,
             'reactions': {}
-        }, room=data.get('room'))
+        }
+        
+        if room not in chat_history:
+            chat_history[room] = []
+        chat_history[room].append(msg_obj)
+        message_reactions[msg_id] = {}
+
+        emit('receive_private_message', msg_obj, room=room)
 
 @socketio.on('send_reaction')
 def handle_reaction(data):
@@ -1267,7 +1296,15 @@ def handle_reaction(data):
             reactions[emoji].remove(slot_id)
             if not reactions[emoji]:
                 del reactions[emoji]
-        emit('update_reactions', {'msg_id': msg_id, 'reactions': reactions}, room=data.get('room'))
+        
+        room = data.get('room')
+        # Also update in chat_history if needed
+        if room in chat_history:
+            for m in chat_history[room]:
+                if m.get('msg_id') == msg_id:
+                    m['reactions'] = reactions
+
+        emit('update_reactions', {'msg_id': msg_id, 'reactions': reactions}, room=room)
 
 @socketio.on('signal')
 def handle_signal(data):
