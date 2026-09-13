@@ -5,7 +5,7 @@ from flask import Flask, render_template_string, request, jsonify
 from flask_socketio import SocketIO, emit, join_room
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'bsher-e2ee-v7-master-key-2026'
+app.config['SECRET_KEY'] = 'bsher-e2ee-v8-master-key-2026'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", max_http_buffer_size=50000000)
 
 ADMIN_TOKEN = "bsher-admin-master-key-2026"
@@ -50,7 +50,6 @@ HTML_PAGE = """
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background-color: #0b141a; color: #e9edef; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         
-        /* Main Header */
         .header { background-color: #202c33; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #222d34; height: 60px; }
         .user-info { display: flex; align-items: center; gap: 8px; cursor: pointer; }
         .btn-back { display: none; background: none; border: none; color: #00a884; font-size: 22px; cursor: pointer; padding: 0 4px; }
@@ -60,26 +59,21 @@ HTML_PAGE = """
         .call-actions { display: flex; gap: 10px; }
         .btn-call { background: #2a3942; border: none; color: #00a884; width: 36px; height: 36px; border-radius: 50%; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
         
-        /* Navigation Tabs */
         .nav-tabs { display: flex; background-color: #111b21; border-bottom: 1px solid #222d34; }
         .tab-btn { flex: 1; padding: 12px; text-align: center; background: none; border: none; color: #8696a0; font-weight: 600; font-size: 13px; cursor: pointer; border-bottom: 3px solid transparent; }
         .tab-btn.active { color: #00a884; border-bottom-color: #00a884; }
         
-        /* Content Panels */
         .content { flex: 1; overflow-y: auto; display: none; padding: 12px; background-color: #0b141a; -webkit-overflow-scrolling: touch; }
         .content.active { display: block; }
         
-        /* Contact List Container */
         #contactListContainer { padding-bottom: 120px; }
         .contact-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: #202c33; border-radius: 10px; margin-bottom: 8px; cursor: pointer; border: 1px solid #222d34; }
         .contact-item:hover { background: #2a3942; }
         .contact-avatar { width: 45px; height: 45px; border-radius: 50%; object-fit: cover; }
         
-        /* Active Chat View */
         #activeChatArea { display: none; flex-direction: column; height: calc(100vh - 170px); }
         .chat-box { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-bottom: 10px; }
         
-        /* Message Bubbles */
         .msg { max-width: 80%; padding: 8px 12px; border-radius: 8px; font-size: 14px; line-height: 1.4; word-break: break-word; }
         .my-msg { background-color: #005c4b; align-self: flex-start; border-top-right-radius: 0; color: #e9edef; }
         .other-msg { background-color: #202c33; align-self: flex-end; border-top-left-radius: 0; color: #e9edef; }
@@ -88,13 +82,11 @@ HTML_PAGE = """
         .chat-media { max-width: 100%; max-height: 220px; border-radius: 8px; margin-top: 4px; }
         audio { width: 220px; height: 35px; margin-top: 4px; }
         
-        /* Bottom Input Bar */
         .input-bar { background-color: #202c33; padding: 8px 10px; display: none; gap: 6px; align-items: center; position: fixed; bottom: 0; left: 0; right: 0; height: 60px; border-top: 1px solid #222d34; }
         .input-bar input[type="text"] { flex: 1; background-color: #2a3942; border: none; padding: 10px 14px; border-radius: 20px; color: white; outline: none; font-size: 14px; }
         .icon-btn { background: none; border: none; font-size: 19px; cursor: pointer; padding: 5px; color: #8696a0; }
         .btn-send { background-color: #00a884; color: #111b21; border: none; width: 40px; height: 40px; border-radius: 50%; font-size: 18px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; }
         
-        /* Status & Admin Cards */
         .status-card { background: #202c33; padding: 12px; border-radius: 10px; margin-bottom: 12px; border: 1px solid #222d34; }
         .status-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
         .status-header img { width: 38px; height: 38px; border-radius: 50%; border: 2px solid #00a884; }
@@ -108,7 +100,6 @@ HTML_PAGE = """
         .profile-form { display: flex; flex-direction: column; gap: 12px; max-width: 400px; margin: 0 auto; background: #202c33; padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 100px; }
         .profile-avatar-preview { width: 90px; height: 90px; border-radius: 50%; object-fit: cover; margin: 0 auto 10px auto; border: 3px solid #00a884; }
 
-        /* Call Overlay Modal */
         #callModal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(11,20,26,0.96); z-index: 9999; flex-direction: column; align-items: center; justify-content: space-between; padding: 30px 20px; }
         .call-user-avatar { width: 110px; height: 110px; border-radius: 50%; border: 3px solid #00a884; object-fit: cover; margin-top: 20px; }
         .video-container { display: flex; flex-direction: column; width: 100%; max-width: 400px; height: 60%; position: relative; gap: 10px; }
@@ -123,7 +114,6 @@ HTML_PAGE = """
 </head>
 <body>
 
-    <!-- Header -->
     <div class="header">
         <div class="user-info">
             <button class="btn-back" id="btnBackToContacts" onclick="closePrivateChat(true)">⬅️</button>
@@ -139,7 +129,6 @@ HTML_PAGE = """
         </div>
     </div>
 
-    <!-- Navigation Tabs -->
     <div class="nav-tabs" id="navTabsBar">
         <button class="tab-btn active" onclick="switchTab('contactsTab')">💬 المحادثات الخاصّة</button>
         <button class="tab-btn" onclick="switchTab('statusTab')">⭕ الحالات</button>
@@ -149,21 +138,33 @@ HTML_PAGE = """
         {% endif %}
     </div>
 
-    <!-- Tab 1: Contacts & Private Chat -->
     <div id="contactsTab" class="content active">
         <div id="contactListContainer">
             <p style="font-size:12px; color:#8696a0; margin-bottom:10px;">اختر متصل لفتح شات خاص مشفر معه (1-on-1):</p>
-            {% for sid, sinfo in all_slots.items() %}
-            {% if sid != current_slot_id %}
-            <div class="contact-item" onclick="openPrivateChat({{ sid }}, '{{ sinfo.name }}', '{{ sinfo.avatar }}')">
-                <img src="{{ sinfo.avatar }}" class="contact-avatar">
-                <div>
-                    <h4 style="font-size:14px; color:#e9edef;">{{ sinfo.name }}</h4>
-                    <p style="font-size:11px; color:#00a884;">🔒 انقر لبدء محادثة مشفرة</p>
+            
+            {% if user_data.type == 'admin' %}
+                <!-- المشرف يرون جميع المستخدَمين من 1 إلى 19 -->
+                {% for sid, sinfo in all_slots.items() %}
+                {% if sid != 0 %}
+                <div class="contact-item" onclick="openPrivateChat({{ sid }}, '{{ sinfo.name }}', '{{ sinfo.avatar }}')">
+                    <img src="{{ sinfo.avatar }}" class="contact-avatar">
+                    <div>
+                        <h4 style="font-size:14px; color:#e9edef;">{{ sinfo.name }}</h4>
+                        <p style="font-size:11px; color:#00a884;">🔒 انقر لبدء محادثة مشفرة</p>
+                    </div>
                 </div>
-            </div>
+                {% endif %}
+                {% endfor %}
+            {% else %}
+                <!-- المستخدم العادي يرى المشرف (بشر) فقط! -->
+                <div class="contact-item" onclick="openPrivateChat(0, '{{ all_slots[0].name }}', '{{ all_slots[0].avatar }}')">
+                    <img src="{{ all_slots[0].avatar }}" class="contact-avatar">
+                    <div>
+                        <h4 style="font-size:14px; color:#e9edef;">{{ all_slots[0].name }}</h4>
+                        <p style="font-size:11px; color:#00a884;">🔒 مالك التطبيق (انقر للتحدث معك)</p>
+                    </div>
+                </div>
             {% endif %}
-            {% endfor %}
         </div>
 
         <div id="activeChatArea">
@@ -171,7 +172,6 @@ HTML_PAGE = """
         </div>
     </div>
 
-    <!-- Tab 2: Statuses -->
     <div id="statusTab" class="content">
         <div class="status-publisher">
             <textarea id="statusText" rows="2" placeholder="اكتب حالتك الجديدة..."></textarea>
@@ -198,7 +198,6 @@ HTML_PAGE = """
         </div>
     </div>
 
-    <!-- Tab 3: Profile & Settings -->
     <div id="profileTab" class="content">
         <div class="profile-form">
             <img src="{{ user_data.avatar }}" class="profile-avatar-preview" id="previewProfileAvatar">
@@ -220,18 +219,18 @@ HTML_PAGE = """
                 <button type="button" onclick="playMsgSound()" style="background:#202c33; color:#00a884; border:1px solid #222d34; padding:8px; border-radius:6px; font-size:11px; cursor:pointer;">🎵 تجربة صوت الرسالة</button>
                 <button type="button" onclick="testRingtone()" style="background:#202c33; color:#00a884; border:1px solid #222d34; padding:8px; border-radius:6px; font-size:11px; cursor:pointer;">📞 تجربة نغمة الرنين</button>
             </div>
+            <button type="button" onclick="logout()" style="background:#ea868f; color:#842029; border:none; padding:8px; border-radius:6px; font-size:11px; font-weight:bold; margin-top:10px; cursor:pointer;">🚪 تغيير الكود / تسجيل الخروج</button>
         </div>
     </div>
 
-    <!-- Tab 4: Admin Panel -->
     {% if user_data.type == 'admin' %}
     <div id="adminTab" class="content">
-        <h4 style="margin-bottom:12px; color:#00a884;">أكواد الـ QR والتحكم بالمستخدمين</h4>
+        <h4 style="margin-bottom:12px; color:#00a884;">أكواد الـ QR والتحكم بالمستخدمين (19 كود)</h4>
         <div class="qr-grid">
             {% for sid, sinfo in all_slots.items() %}
             <div class="qr-card">
                 <h4>{{ sinfo.name }} {% if sid == 0 %}(أنت - المالك){% endif %}</h4>
-                <p style="font-size:11px; color:#8696a0;">{{ sinfo.bio }}</p>
+                <p style="font-size:11px; color:#8696a0;">الكود السرّي: <b style="color:#00a884;">{{ sinfo.token }}</b></p>
                 <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data={{ base_url }}/?token={{ sinfo.token }}" width="130" height="130" style="border:3px solid white; border-radius:6px; margin:8px 0;">
                 <p style="font-size:10px; color:#00a884; word-break:break-all;">{{ base_url }}/?token={{ sinfo.token }}</p>
                 {% if sid != 0 %}
@@ -243,7 +242,6 @@ HTML_PAGE = """
     </div>
     {% endif %}
 
-    <!-- Input Bar -->
     <div class="input-bar" id="inputBar">
         <button class="icon-btn" onclick="document.getElementById('imgFile').click()">📷</button>
         <input type="file" id="imgFile" accept="image/*,video/*" style="display:none;" onchange="sendMediaMessage(this)">
@@ -252,17 +250,13 @@ HTML_PAGE = """
         <button class="btn-send" onclick="sendMsg()">➤</button>
     </div>
 
-    <!-- Call Overlay Modal -->
     <div id="callModal">
         <h3 id="callStatusText" style="color:#00a884; margin-top:10px;">جاري الاتصال...</h3>
-        
         <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" class="call-user-avatar" id="callAvatar">
-
         <div class="video-container" id="videoContainer" style="display:none;">
             <video id="remoteVideo" autoplay playsinline></video>
             <video id="localVideo" autoplay playsinline muted></video>
         </div>
-
         <div class="call-controls">
             <button class="btn-ctrl" id="btnToggleMic" onclick="toggleMic()">🎙️</button>
             <button class="btn-end-call" onclick="endCall()">📞</button>
@@ -276,35 +270,26 @@ HTML_PAGE = """
         const myDefaultName = "{{ user_data.name }}";
         const myDefaultAvatar = "{{ user_data.avatar }}";
         
-        /* Persistent Session Engine (LocalStorage Auto-Login) */
-        const urlParams = new URLSearchParams(window.location.search);
-        const hasTokenInUrl = urlParams.has('token');
+        localStorage.setItem('bisher_chat_token', currentToken);
 
-        if (hasTokenInUrl && currentToken) {
-            localStorage.setItem('bisher_chat_token', currentToken);
-        } else {
-            const savedToken = localStorage.getItem('bisher_chat_token');
-            if (savedToken && savedToken !== currentToken) {
-                window.location.href = "/?token=" + savedToken;
-            }
+        function logout() {
+            localStorage.removeItem('bisher_chat_token');
+            window.location.href = '/';
         }
 
         let activeTargetSlot = null;
         let activeRoom = null;
         let activeTargetName = "";
         let activeTargetAvatar = "";
-        
         let secretKey = "bsher-e2ee-key-2026";
         let currentAvatarData = myDefaultAvatar;
 
-        /* Hardware Back Button Handler (Android System Back Button) */
         window.onpopstate = function(event) {
             if (document.getElementById('activeChatArea').style.display === 'flex') {
                 closePrivateChat(false);
             }
         };
 
-        /* Audio Synthesizer for Notifications & Ringtone */
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         let audioCtx = null;
         let ringtoneInterval = null;
@@ -340,17 +325,13 @@ HTML_PAGE = """
                     const osc1 = ctx.createOscillator();
                     const osc2 = ctx.createOscillator();
                     const gain = ctx.createGain();
-                    
                     osc1.frequency.value = 440;
                     osc2.frequency.value = 480;
-                    
                     gain.gain.setValueAtTime(0.25, ctx.currentTime);
                     gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.8);
-                    
                     osc1.connect(gain);
                     osc2.connect(gain);
                     gain.connect(ctx.destination);
-                    
                     osc1.start(); osc2.start();
                     osc1.stop(ctx.currentTime + 0.8);
                     osc2.stop(ctx.currentTime + 0.8);
@@ -376,8 +357,6 @@ HTML_PAGE = """
                     if (perm === "granted") {
                         alert("✅ تم تفعيل إشعارات الهاتف بنجاح!");
                         new Notification("bisher chat", { body: "الإشعارات النبضية مفعلة وجاهزة!", icon: myDefaultAvatar });
-                    } else {
-                        alert("⚠️ يرجى السماح بالإشعارات في إعدادات الهاتف.");
                     }
                 });
             }
@@ -513,7 +492,6 @@ HTML_PAGE = """
             }
         }
 
-        /* Voice Note Recording with Immediate Hardware Release */
         let mediaRecorder, audioChunks = [], isRecording = false, recordStream = null;
         async function toggleRecord() {
             const micBtn = document.getElementById("micBtn");
@@ -549,7 +527,6 @@ HTML_PAGE = """
             }
         }
 
-        /* WebRTC Call Engine with Absolute Hardware (Cam & Mic) Release */
         let localStream = null, peerConnection = null;
         let isMicMuted = false, isSpeakerMuted = false;
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
@@ -751,11 +728,51 @@ HTML_PAGE = """
 
 @app.route('/')
 def index():
-    token = request.args.get('token', ADMIN_TOKEN)
+    token = request.args.get('token')
+    if not token:
+        return render_template_string("""
+        <!DOCTYPE html>
+        <html lang="ar" dir="rtl">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>bisher chat - تفعيل التطبيق</title>
+            <style>
+                body { background: #0b141a; color: white; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+                .card { background: #202c33; padding: 25px; border-radius: 12px; width: 85%; max-width: 350px; border: 1px solid #00a884; text-align: center; }
+                input { width: 100%; padding: 12px; margin: 15px 0; border-radius: 8px; border: 1px solid #3b4a54; background: #2a3942; color: white; font-size: 14px; text-align: center; outline: none; }
+                button { width: 100%; padding: 12px; background: #00a884; border: none; color: #111b21; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; }
+            </style>
+        </head>
+        <body>
+            <script>
+                const saved = localStorage.getItem('bisher_chat_token');
+                if (saved) { window.location.href = '/?token=' + saved; }
+            </script>
+            <div class="card">
+                <h3 style="color:#00a884; margin-bottom: 8px;">bisher chat 🔒</h3>
+                <p style="font-size:12px; color:#8696a0;">أدخل الكود السرّي الخافيك من المشرف لتسجيل دخولك:</p>
+                <input type="text" id="tkInput" placeholder="أدخل كود المستخدم هنا...">
+                <button onclick="login()">دخول الشات 🚀</button>
+            </div>
+            <script>
+                function login() {
+                    const val = document.getElementById('tkInput').value.trim();
+                    if (val) {
+                        localStorage.setItem('bisher_chat_token', val);
+                        window.location.href = '/?token=' + val;
+                    } else {
+                        alert('يرجى إدخال الكود الخاص بك!');
+                    }
+                }
+            </script>
+        </body>
+        </html>
+        """)
+        
     slot_id, user_data = get_slot_by_token(token)
-    
     if not user_data:
-        return "<h2 style='color:white; background:#111b21; padding:20px; text-align:center;'>❌ رابط الـ QR غير صالح أو تم طرده!</h2>", 403
+        return "<h2 style='color:white; background:#111b21; padding:20px; text-align:center;'>❌ الكود غير صالح أو تم طرده!</h2>", 403
         
     base_url = request.host_url.rstrip('/')
     return render_template_string(HTML_PAGE, user_data=user_data, current_slot_id=slot_id, all_slots=slots, statuses=statuses, base_url=base_url)
