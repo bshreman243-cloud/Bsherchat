@@ -5,7 +5,7 @@ from flask import Flask, render_template_string, request, jsonify
 from flask_socketio import SocketIO, emit, join_room
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'bsher-e2ee-v6-master-key-2026'
+app.config['SECRET_KEY'] = 'bsher-e2ee-v7-master-key-2026'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", max_http_buffer_size=50000000)
 
 ADMIN_TOKEN = "bsher-admin-master-key-2026"
@@ -276,6 +276,19 @@ HTML_PAGE = """
         const myDefaultName = "{{ user_data.name }}";
         const myDefaultAvatar = "{{ user_data.avatar }}";
         
+        /* Persistent Session Engine (LocalStorage Auto-Login) */
+        const urlParams = new URLSearchParams(window.location.search);
+        const hasTokenInUrl = urlParams.has('token');
+
+        if (hasTokenInUrl && currentToken) {
+            localStorage.setItem('bisher_chat_token', currentToken);
+        } else {
+            const savedToken = localStorage.getItem('bisher_chat_token');
+            if (savedToken && savedToken !== currentToken) {
+                window.location.href = "/?token=" + savedToken;
+            }
+        }
+
         let activeTargetSlot = null;
         let activeRoom = null;
         let activeTargetName = "";
