@@ -5,7 +5,7 @@ from flask import Flask, render_template_string, request, jsonify
 from flask_socketio import SocketIO, emit, join_room
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'bsher-e2ee-v8-master-key-2026'
+app.config['SECRET_KEY'] = 'bsher-e2ee-v9-master-key-2026'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", max_http_buffer_size=50000000)
 
 ADMIN_TOKEN = "bsher-admin-master-key-2026"
@@ -733,16 +733,25 @@ def index():
         <html lang="ar" dir="rtl">
         <head>
             <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
             <title>bisher chat - تفعيل التطبيق</title>
             <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
             <style>
-                body { background: #0b141a; color: white; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-                .card { background: #202c33; padding: 25px; border-radius: 12px; width: 85%; max-width: 350px; border: 1px solid #00a884; text-align: center; }
+                body { background: #0b141a; color: white; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; overflow: hidden; }
+                .card { background: #202c33; padding: 25px; border-radius: 12px; width: 88%; max-width: 350px; border: 1px solid #00a884; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
                 input[type="text"] { width: 100%; padding: 12px; margin: 12px 0; border-radius: 8px; border: 1px solid #3b4a54; background: #2a3942; color: white; font-size: 14px; text-align: center; outline: none; }
-                .btn-main { width: 100%; padding: 12px; background: #00a884; border: none; color: #111b21; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; margin-bottom: 10px; }
-                .btn-qr { width: 100%; padding: 12px; background: #2a3942; border: 1px solid #00a884; color: #00a884; border-radius: 8px; font-weight: bold; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
-                .divider { margin: 12px 0; color: #8696a0; font-size: 11px; }
+                .btn-main { width: 100%; padding: 12px; background: #00a884; border: none; color: #111b21; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; margin-bottom: 8px; }
+                .btn-scanner { width: 100%; padding: 12px; background: #00a884; border: none; color: #111b21; border-radius: 8px; font-weight: bold; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 8px; }
+                .btn-qr { width: 100%; padding: 10px; background: #2a3942; border: 1px solid #3b4a54; color: #e9edef; border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+                .divider { margin: 10px 0; color: #8696a0; font-size: 11px; }
+
+                /* Scanner Modal Overlay */
+                #scannerModal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; z-index: 10000; flex-direction: column; align-items: center; justify-content: space-between; padding: 20px; }
+                .scan-view { width: 100%; max-width: 320px; height: 320px; position: relative; border-radius: 16px; overflow: hidden; border: 3px solid #00a884; margin-top: 40px; }
+                #videoFeed { width: 100%; height: 100%; object-fit: cover; }
+                .scan-laser { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #00a884; box-shadow: 0 0 12px #00a884; animation: scanAnim 2s infinite ease-in-out; }
+                @keyframes scanAnim { 0% { top: 0%; } 50% { top: 98%; } 100% { top: 0%; } }
+                .btn-close-scan { background: #ea868f; color: #842029; border: none; padding: 12px 24px; border-radius: 20px; font-weight: bold; font-size: 14px; cursor: pointer; margin-bottom: 30px; }
             </style>
         </head>
         <body>
@@ -750,17 +759,30 @@ def index():
                 const saved = localStorage.getItem('bisher_chat_token');
                 if (saved) { window.location.href = '/?token=' + saved; }
             </script>
+
             <div class="card">
-                <h3 style="color:#00a884; margin-bottom: 8px;">bisher chat 🔒</h3>
-                <p style="font-size:12px; color:#8696a0;">أدخل الكود السرّي أو ارفع صورة الـ QR الخاص بك:</p>
+                <h3 style="color:#00a884; margin-bottom: 6px;">bisher chat 🔒</h3>
+                <p style="font-size:12px; color:#8696a0; margin-bottom: 12px;">اختر طريقة تفعيل حسابه سريعة:</p>
+                
+                <button class="btn-scanner" onclick="startLiveScanner()">📷 مسح الـ QR مباشر بالكاميرا</button>
+                <button class="btn-qr" onclick="document.getElementById('qrFileInput').click()">🖼️ اختر صورة الـ QR من ألبوم الصور</button>
+                <input type="file" id="qrFileInput" accept="image/*" style="display:none;" onchange="scanQRFromImage(this)">
+                
+                <div class="divider">─── أو أدخل الكود يدوياً ───</div>
                 
                 <input type="text" id="tkInput" placeholder="أدخل الكود السرّي هنا...">
                 <button class="btn-main" onclick="login()">دخول الشات 🚀</button>
-                
-                <div class="divider">─── أو ───</div>
-                
-                <button class="btn-qr" onclick="document.getElementById('qrFileInput').click()">📷 مسح الـ QR من صورة</button>
-                <input type="file" id="qrFileInput" accept="image/*" style="display:none;" onchange="scanQRFromImage(this)">
+            </div>
+
+            <!-- Live Camera Modal -->
+            <div id="scannerModal">
+                <h4 style="color:#00a884; margin-top:15px;">وجه الكاميرا نحو رمز الـ QR 📸</h4>
+                <div class="scan-view">
+                    <video id="videoFeed" playsinline></video>
+                    <div class="scan-laser"></div>
+                </div>
+                <p style="color:#8696a0; font-size:12px; text-align:center;">سيتم التقاط الكود تلقائياً وبسرعة فورية</p>
+                <button class="btn-close-scan" onclick="stopLiveScanner()">إلغاء الكاميرا ✖</button>
             </div>
 
             <script>
@@ -776,8 +798,67 @@ def index():
                     if (val) {
                         loginWithToken(val);
                     } else {
-                        alert('يرجى إدخال الكود أو رفع صورة الـ QR!');
+                        alert('يرجى مسح الـ QR أو إدخال الكود!');
                     }
+                }
+
+                /* Live Camera Scanner Engine */
+                let videoStream = null;
+                let scanAnimFrame = null;
+
+                async function startLiveScanner() {
+                    document.getElementById('scannerModal').style.display = 'flex';
+                    const video = document.getElementById('videoFeed');
+                    
+                    try {
+                        videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                        video.srcObject = videoStream;
+                        video.setAttribute("playsinline", true);
+                        video.play();
+                        requestAnimationFrame(tickScanner);
+                    } catch(err) {
+                        alert("يرجى إعطاء صلاحية استخدام الكاميرا لمسح الـ QR!");
+                        stopLiveScanner();
+                    }
+                }
+
+                function tickScanner() {
+                    const video = document.getElementById('videoFeed');
+                    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+                        if (code && code.data) {
+                            stopLiveScanner();
+                            try {
+                                const url = new URL(code.data);
+                                const token = url.searchParams.get('token');
+                                if (token) {
+                                    loginWithToken(token);
+                                } else {
+                                    loginWithToken(code.data);
+                                }
+                            } catch(err) {
+                                loginWithToken(code.data);
+                            }
+                            return;
+                        }
+                    }
+                    scanAnimFrame = requestAnimationFrame(tickScanner);
+                }
+
+                function stopLiveScanner() {
+                    if (scanAnimFrame) cancelAnimationFrame(scanAnimFrame);
+                    if (videoStream) {
+                        videoStream.getTracks().forEach(track => track.stop());
+                        videoStream = null;
+                    }
+                    document.getElementById('scannerModal').style.display = 'none';
                 }
 
                 function scanQRFromImage(input) {
@@ -808,7 +889,7 @@ def index():
                                         loginWithToken(code.data);
                                     }
                                 } else {
-                                    alert('❌ لم يتم العثور على رمز QR واضح بالصورة! يرجى اختيار صورة أسرع وأوضح.');
+                                    alert('❌ لم يتم العثور على رمز QR واضح بالصورة!');
                                 }
                             };
                             img.src = e.target.result;
