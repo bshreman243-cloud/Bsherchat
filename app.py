@@ -5,7 +5,7 @@ from flask import Flask, render_template_string, request, jsonify
 from flask_socketio import SocketIO, emit, join_room
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'bsher-e2ee-v3-master-key-2026'
+app.config['SECRET_KEY'] = 'bsher-e2ee-v6-master-key-2026'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", max_http_buffer_size=50000000)
 
 ADMIN_TOKEN = "bsher-admin-master-key-2026"
@@ -108,7 +108,7 @@ HTML_PAGE = """
         .profile-form { display: flex; flex-direction: column; gap: 12px; max-width: 400px; margin: 0 auto; background: #202c33; padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 100px; }
         .profile-avatar-preview { width: 90px; height: 90px; border-radius: 50%; object-fit: cover; margin: 0 auto 10px auto; border: 3px solid #00a884; }
 
-        /* Call Modal View */
+        /* Call Overlay Modal */
         #callModal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(11,20,26,0.96); z-index: 9999; flex-direction: column; align-items: center; justify-content: space-between; padding: 30px 20px; }
         .call-user-avatar { width: 110px; height: 110px; border-radius: 50%; border: 3px solid #00a884; object-fit: cover; margin-top: 20px; }
         .video-container { display: flex; flex-direction: column; width: 100%; max-width: 400px; height: 60%; position: relative; gap: 10px; }
@@ -126,7 +126,7 @@ HTML_PAGE = """
     <!-- Header -->
     <div class="header">
         <div class="user-info">
-            <button class="btn-back" id="btnBackToContacts" onclick="closePrivateChat()">⬅️</button>
+            <button class="btn-back" id="btnBackToContacts" onclick="closePrivateChat(true)">⬅️</button>
             <img src="{{ user_data.avatar }}" class="avatar" id="hdrAvatar">
             <div class="user-details">
                 <h4 id="hdrChatTarget">{{ user_data.name }}</h4>
@@ -198,7 +198,7 @@ HTML_PAGE = """
         </div>
     </div>
 
-    <!-- Tab 3: Profile -->
+    <!-- Tab 3: Profile & Settings -->
     <div id="profileTab" class="content">
         <div class="profile-form">
             <img src="{{ user_data.avatar }}" class="profile-avatar-preview" id="previewProfileAvatar">
@@ -212,6 +212,14 @@ HTML_PAGE = """
             <input type="text" id="inputBio" value="{{ user_data.bio }}" style="background:#2a3942; border:1px solid #3b4a54; padding:10px; border-radius:6px; color:white;">
             
             <button onclick="saveProfile()" style="background:#00a884; color:#111b21; border:none; padding:12px; border-radius:6px; font-weight:bold; cursor:pointer;">حفظ البيانات</button>
+            
+            <hr style="border-color:#222d34; margin:10px 0;">
+            <h4 style="color:#00a884; font-size:14px; text-align:right;">🔔 إعدادات الإشعارات والأصوات</h4>
+            <button type="button" onclick="requestNotificationPermission()" style="background:#2a3942; color:#e9edef; border:1px solid #00a884; padding:10px; border-radius:6px; font-size:12px; font-weight:bold; cursor:pointer;">🔔 تفعيل إشعارات الهاتف والخلفية</button>
+            <div style="display:flex; gap:10px; justify-content:center;">
+                <button type="button" onclick="playMsgSound()" style="background:#202c33; color:#00a884; border:1px solid #222d34; padding:8px; border-radius:6px; font-size:11px; cursor:pointer;">🎵 تجربة صوت الرسالة</button>
+                <button type="button" onclick="testRingtone()" style="background:#202c33; color:#00a884; border:1px solid #222d34; padding:8px; border-radius:6px; font-size:11px; cursor:pointer;">📞 تجربة نغمة الرنين</button>
+            </div>
         </div>
     </div>
 
@@ -276,6 +284,99 @@ HTML_PAGE = """
         let secretKey = "bsher-e2ee-key-2026";
         let currentAvatarData = myDefaultAvatar;
 
+        /* Hardware Back Button Handler (Android System Back Button) */
+        window.onpopstate = function(event) {
+            if (document.getElementById('activeChatArea').style.display === 'flex') {
+                closePrivateChat(false);
+            }
+        };
+
+        /* Audio Synthesizer for Notifications & Ringtone */
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        let audioCtx = null;
+        let ringtoneInterval = null;
+
+        function getAudioContext() {
+            if (!audioCtx) audioCtx = new AudioCtx();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            return audioCtx;
+        }
+
+        function playMsgSound() {
+            try {
+                const ctx = getAudioContext();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.3, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.15);
+            } catch(e){}
+        }
+
+        function startRingtone() {
+            stopRingtone();
+            ringtoneInterval = setInterval(() => {
+                try {
+                    const ctx = getAudioContext();
+                    const osc1 = ctx.createOscillator();
+                    const osc2 = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    
+                    osc1.frequency.value = 440;
+                    osc2.frequency.value = 480;
+                    
+                    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.8);
+                    
+                    osc1.connect(gain);
+                    osc2.connect(gain);
+                    gain.connect(ctx.destination);
+                    
+                    osc1.start(); osc2.start();
+                    osc1.stop(ctx.currentTime + 0.8);
+                    osc2.stop(ctx.currentTime + 0.8);
+                } catch(e){}
+            }, 1200);
+        }
+
+        function stopRingtone() {
+            if (ringtoneInterval) {
+                clearInterval(ringtoneInterval);
+                ringtoneInterval = null;
+            }
+        }
+
+        function testRingtone() {
+            startRingtone();
+            setTimeout(stopRingtone, 3600);
+        }
+
+        function requestNotificationPermission() {
+            if ("Notification" in window) {
+                Notification.requestPermission().then(perm => {
+                    if (perm === "granted") {
+                        alert("✅ تم تفعيل إشعارات الهاتف بنجاح!");
+                        new Notification("bisher chat", { body: "الإشعارات النبضية مفعلة وجاهزة!", icon: myDefaultAvatar });
+                    } else {
+                        alert("⚠️ يرجى السماح بالإشعارات في إعدادات الهاتف.");
+                    }
+                });
+            }
+        }
+
+        function triggerSystemNotification(title, bodyText) {
+            playMsgSound();
+            if ("Notification" in window && Notification.permission === "granted") {
+                new Notification(title, { body: bodyText, icon: myDefaultAvatar });
+            }
+        }
+
         const socket = io();
         socket.emit('join', { token: currentToken });
 
@@ -309,9 +410,11 @@ HTML_PAGE = """
             activeRoom = (mySlotId < targetSlotId) ? `room_${mySlotId}_${targetSlotId}` : `room_${targetSlotId}_${mySlotId}`;
             socket.emit('join_private_room', { room: activeRoom });
             document.getElementById('chatBox').innerHTML = `<div style="text-align:center; font-size:11px; color:#00a884; margin:10px 0;">🔒 المحادثة مشفرة بالكامل بينك وبين ${targetName} (E2EE)</div>`;
+
+            history.pushState({ inChat: true }, "");
         }
 
-        function closePrivateChat() {
+        function closePrivateChat(triggerHistoryBack = false) {
             activeTargetSlot = null;
             activeRoom = null;
 
@@ -323,9 +426,17 @@ HTML_PAGE = """
 
             document.getElementById('hdrChatTarget').innerText = myDefaultName;
             document.getElementById('hdrAvatar').src = myDefaultAvatar;
+
+            if (triggerHistoryBack && history.state && history.state.inChat) {
+                history.back();
+            }
         }
 
         socket.on('receive_private_message', function(data) {
+            if (data.sender_slot !== mySlotId) {
+                triggerSystemNotification(`رسالة مشفرة من ${data.sender_name}`, "🔒 وصلتك رسالة جديدة في bisher chat");
+            }
+
             if (data.room !== activeRoom) return;
             
             const chatBox = document.getElementById("chatBox");
@@ -389,16 +500,21 @@ HTML_PAGE = """
             }
         }
 
-        let mediaRecorder, audioChunks = [], isRecording = false;
+        /* Voice Note Recording with Immediate Hardware Release */
+        let mediaRecorder, audioChunks = [], isRecording = false, recordStream = null;
         async function toggleRecord() {
             const micBtn = document.getElementById("micBtn");
             if (!isRecording) {
                 try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    mediaRecorder = new MediaRecorder(stream);
+                    recordStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(recordStream);
                     audioChunks = [];
                     mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
                     mediaRecorder.onstop = () => {
+                        if (recordStream) {
+                            recordStream.getTracks().forEach(track => track.stop());
+                            recordStream = null;
+                        }
                         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                         const reader = new FileReader();
                         reader.onload = function(e) {
@@ -414,14 +530,14 @@ HTML_PAGE = """
                     alert("يرجى إعطاء الصلاحية لاستخدام الميكروفون!");
                 }
             } else {
-                mediaRecorder.stop();
+                if (mediaRecorder) mediaRecorder.stop();
                 isRecording = false;
                 micBtn.style.color = "#8696a0";
             }
         }
 
-        /* Fixed Audio/Video WebRTC Logic with Speaker & Mic Controls */
-        let localStream, peerConnection;
+        /* WebRTC Call Engine with Absolute Hardware (Cam & Mic) Release */
+        let localStream = null, peerConnection = null;
         let isMicMuted = false, isSpeakerMuted = false;
         const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
@@ -468,8 +584,15 @@ HTML_PAGE = """
             if (data.token === currentToken || data.room !== activeRoom) return;
             
             if (data.type === 'offer') {
+                startRingtone();
                 const callTypeLabel = data.isVideo ? "مكالمة فيديو مرئية 📹" : "مكالمة صوتية 📞";
+                
+                if ("Notification" in window && Notification.permission === "granted") {
+                    new Notification("مكالمة واردة في bisher chat", { body: `${callTypeLabel}`, icon: myDefaultAvatar });
+                }
+
                 if (confirm(`مكالمة واردة: ${callTypeLabel}! هل تريد الرد؟`)) {
+                    stopRingtone();
                     document.getElementById('callModal').style.display = 'flex';
                     document.getElementById('callAvatar').src = activeTargetAvatar || myDefaultAvatar;
                     document.getElementById('callStatusText').innerText = "المكالمة متصلة 🟢";
@@ -501,13 +624,18 @@ HTML_PAGE = """
                     const answer = await peerConnection.createAnswer();
                     await peerConnection.setLocalDescription(answer);
                     socket.emit('signal', { room: activeRoom, token: currentToken, type: 'answer', answer: answer });
+                } else {
+                    stopRingtone();
+                    endCall(true);
                 }
             } else if (data.type === 'answer' && peerConnection) {
+                stopRingtone();
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
                 document.getElementById('callStatusText').innerText = "المكالمة متصلة 🟢";
             } else if (data.type === 'candidate' && peerConnection) {
                 await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
             } else if (data.type === 'end') {
+                stopRingtone();
                 endCall(false);
             }
         });
@@ -533,9 +661,26 @@ HTML_PAGE = """
         }
 
         function endCall(emitEvent = true) {
+            stopRingtone();
             if (emitEvent && activeRoom) socket.emit('signal', { room: activeRoom, token: currentToken, type: 'end' });
-            if (localStream) localStream.getTracks().forEach(track => track.stop());
-            if (peerConnection) peerConnection.close();
+            
+            if (localStream) {
+                localStream.getTracks().forEach(track => {
+                    track.stop();
+                    track.enabled = false;
+                });
+                localStream = null;
+            }
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+
+            const lVid = document.getElementById('localVideo');
+            const rVid = document.getElementById('remoteVideo');
+            if (lVid) lVid.srcObject = null;
+            if (rVid) rVid.srcObject = null;
+
             document.getElementById('callModal').style.display = 'none';
         }
 
